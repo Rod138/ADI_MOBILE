@@ -1,6 +1,6 @@
 import { Colors } from "@/constants/colors";
 import React, { useRef } from "react";
-import { ActivityIndicator, Animated, Text, TouchableOpacity, ViewStyle } from "react-native";
+import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, ViewStyle } from "react-native";
 
 interface PrimaryButtonProps {
     label: string;
@@ -49,43 +49,23 @@ export default function PrimaryButton({
                 onPressOut={handlePressOut}
                 disabled={isDisabled}
                 activeOpacity={1}
-                className={[
-                    "h-14 rounded-2xl items-center justify-center overflow-hidden",
-                    isDisabled
-                        ? "bg-white/30"
-                        : isLight
-                            ? "bg-white"
-                            : "bg-blue-900",
-                ].join(" ")}
-                style={
-                    !isDisabled
-                        ? isLight
-                            ? {
-                                shadowColor: "#000",
-                                shadowOffset: { width: 0, height: 6 },
-                                shadowOpacity: 0.22,
-                                shadowRadius: 14,
-                                elevation: 6,
-                            }
-                            : {
-                                shadowColor: Colors.primary.main,
-                                shadowOffset: { width: 0, height: 8 },
-                                shadowOpacity: 0.45,
-                                shadowRadius: 16,
-                                elevation: 8,
-                            }
-                        : undefined
-                }
+                style={[
+                    styles.buttonBase,
+                    isDisabled ? styles.buttonDisabled : (isLight ? styles.buttonLight : styles.buttonPrimary),
+                    !isDisabled && (isLight ? styles.shadowLight : styles.shadowPrimary)
+                ]}
             >
                 {/* Shine overlay */}
                 <Animated.View
                     pointerEvents="none"
-                    className="absolute top-0 left-0 right-0 h-1/2 rounded-t-2xl"
-                    style={{
-                        backgroundColor: isLight
-                            ? "rgba(255,255,255,0.30)"
-                            : "rgba(255,255,255,0.10)",
-                    }}
+                    style={[
+                        styles.shineOverlay,
+                        {
+                            backgroundColor: isLight
+                                ? "rgba(255,255,255,0.30)"
+                                : "rgba(255,255,255,0.10)",
+                        }
+                    ]}
                 />
 
                 {isLoading ? (
@@ -95,11 +75,11 @@ export default function PrimaryButton({
                     />
                 ) : (
                     <Text
-                        className={[
-                            "text-[13px] font-extrabold tracking-widest",
-                            isDisabled ? "opacity-50" : "",
-                            isLight ? "text-blue-900" : "text-white",
-                        ].join(" ")}
+                        style={[
+                            styles.textBase,
+                            isDisabled && styles.textDisabled,
+                            isLight ? styles.textLight : styles.textPrimary
+                        ]}
                     >
                         {label.toUpperCase()}
                     </Text>
@@ -108,3 +88,59 @@ export default function PrimaryButton({
         </Animated.View>
     );
 }
+
+const styles = StyleSheet.create({
+    buttonBase: {
+        height: 56, // 14 * 4
+        borderRadius: 16, // rounded-2xl
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+    },
+    buttonDisabled: {
+        backgroundColor: "rgba(255,255,255,0.30)",
+    },
+    buttonLight: {
+        backgroundColor: Colors.white,
+    },
+    buttonPrimary: {
+        backgroundColor: Colors.primary.main,
+    },
+    shadowLight: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.22,
+        shadowRadius: 14,
+        elevation: 6,
+    },
+    shadowPrimary: {
+        shadowColor: Colors.primary.main,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.45,
+        shadowRadius: 16,
+        elevation: 8,
+    },
+    shineOverlay: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: "50%",
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+    },
+    textBase: {
+        fontSize: 13,
+        fontWeight: "800",
+        letterSpacing: 1.5,
+    },
+    textDisabled: {
+        opacity: 0.5,
+    },
+    textLight: {
+        color: Colors.primary.main,
+    },
+    textPrimary: {
+        color: Colors.white,
+    },
+});

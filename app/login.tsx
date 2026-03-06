@@ -1,6 +1,7 @@
 import InputField from "@/components/InputField";
 import PrimaryButton from "@/components/PrimaryButton";
 import { useAuth } from "@/hooks/useAuth";
+import { globalStyles } from "@/utils/globalStyles";
 import { isFormValid, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, validateLoginForm } from "@/utils/validators";
 import { router } from "expo-router";
 import React, { useState } from "react";
@@ -56,7 +57,7 @@ export default function LoginScreen() {
         setFieldErrors(errors);
         if (!isFormValid(errors)) return;
         const result = await login({ email: email.trim().toLowerCase(), password });
-        if (result) router.replace("/(tabs)");
+        if (result) router.replace("/(tabs)" as any);
     };
 
     const handleForgotPassword = () => {
@@ -79,12 +80,12 @@ export default function LoginScreen() {
             <View style={[styles.accentLine, { right: 66, top: 100, height: 56, opacity: 0.04 }]} />
 
             <KeyboardAvoidingView
-                style={styles.flex1}
+                style={globalStyles.flex1}
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
             >
-                <SafeAreaView style={styles.flex1}>
+                <SafeAreaView style={globalStyles.flex1}>
                     <ScrollView
-                        contentContainerStyle={styles.scrollContent}
+                        contentContainerStyle={globalStyles.scrollContent}
                         keyboardShouldPersistTaps="handled"
                         showsVerticalScrollIndicator={false}
                     >
@@ -108,17 +109,17 @@ export default function LoginScreen() {
                         {/* ════ FORM ════ */}
                         <View style={styles.formSection}>
                             <View style={styles.formHeader}>
-                                <Text style={styles.formTitle}>Inicia sesión</Text>
+                                <Text style={globalStyles.formTitle}>Inicia sesión</Text>
                             </View>
 
                             {/* Glass card */}
-                            <View style={styles.card}>
+                            <View style={globalStyles.glassCard}>
                                 <View style={styles.cardShimmer} />
                                 <View style={styles.cardContent}>
                                     {error && (
-                                        <View style={styles.errorBanner}>
-                                            <View style={styles.errorDot} />
-                                            <Text style={styles.errorBannerText}>{error}</Text>
+                                        <View style={globalStyles.errorBanner}>
+                                            <View style={globalStyles.errorDot} />
+                                            <Text style={globalStyles.errorBannerText}>{error}</Text>
                                         </View>
                                     )}
 
@@ -188,17 +189,9 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-    flex1: { flex: 1 },
     root: {
         flex: 1,
         backgroundColor: "#0C1F5C",
-    },
-    scrollContent: {
-        flexGrow: 1,
-        paddingHorizontal: 24,
-        paddingTop: 32,
-        paddingBottom: 48,
-        gap: 40,
     },
 
     // Blobs
@@ -230,8 +223,9 @@ const styles = StyleSheet.create({
         paddingTop: 16,
     },
     logoRing: {
-        width: 108, height: 108,
-        borderRadius: 28,
+        backgroundColor: "white",
+        width: 125, height: 125,
+        borderRadius: 50,
         alignItems: "center",
         justifyContent: "center",
         marginBottom: 16,
@@ -257,27 +251,8 @@ const styles = StyleSheet.create({
     // Form
     formSection: { gap: 20 },
     formHeader: { gap: 2 },
-    formTitle: {
-        fontFamily: "Outfit_800ExtraBold",
-        fontSize: 28,
-        color: "#FFFFFF",
-        letterSpacing: 0.2,
-        textAlign: "center",
-    },
 
-    // Card
-    card: {
-        borderRadius: 28,
-        overflow: "hidden",
-        backgroundColor: "rgba(255,255,255,0.07)",
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.11)",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 20 },
-        shadowOpacity: 0.45,
-        shadowRadius: 32,
-        elevation: 20,
-    },
+    // Card internal padding/effects specific to login specific styling
     cardShimmer: {
         height: 1,
         backgroundColor: "rgba(255,255,255,0.15)",
@@ -285,30 +260,6 @@ const styles = StyleSheet.create({
     cardContent: {
         padding: 24,
         paddingTop: 28,
-    },
-
-    // Error banner
-    errorBanner: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-        backgroundColor: "rgba(220,38,38,0.14)",
-        borderWidth: 1,
-        borderColor: "rgba(252,165,165,0.28)",
-        borderRadius: 14,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        marginBottom: 20,
-    },
-    errorDot: {
-        width: 6, height: 6, borderRadius: 3,
-        backgroundColor: "#FCA5A5",
-    },
-    errorBannerText: {
-        fontFamily: "Outfit_500Medium",
-        fontSize: 13,
-        color: "#FCA5A5",
-        flex: 1,
     },
 
     // Forgot

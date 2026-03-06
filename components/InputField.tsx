@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useRef, useState } from "react";
 import {
     Animated,
+    StyleSheet,
     Text,
     TextInput,
     TextInputProps,
@@ -69,13 +70,13 @@ export default function InputField({
             : dark ? "rgba(255,255,255,0.40)" : Colors.neutral[400];
 
     return (
-        <View className="mb-[18px]">
+        <View style={styles.container}>
             {/* Label */}
             <Text
-                className={[
-                    "text-[11px] font-bold tracking-[1.2px] uppercase mb-2",
-                    dark ? "text-white/65" : "text-gray-700",
-                ].join(" ")}
+                style={[
+                    styles.labelBase,
+                    dark ? styles.labelDark : styles.labelLight
+                ]}
             >
                 {label}
             </Text>
@@ -123,7 +124,7 @@ export default function InputField({
                     <TouchableOpacity
                         onPress={() => setShowPassword((v) => !v)}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        className="pl-2"
+                        style={styles.eyeBtn}
                     >
                         <Ionicons
                             name={showPassword ? "eye-off-outline" : "eye-outline"}
@@ -136,17 +137,17 @@ export default function InputField({
 
             {/* Error */}
             {error && (
-                <View className="flex-row items-center mt-1.5 gap-1">
+                <View style={styles.errorRow}>
                     <Ionicons
                         name="alert-circle-outline"
                         size={12}
                         color={dark ? "#FCA5A5" : Colors.status.error}
                     />
                     <Text
-                        className={[
-                            "text-[12px] font-medium",
-                            dark ? "text-red-300" : "text-red-600",
-                        ].join(" ")}
+                        style={[
+                            styles.errorTextBase,
+                            dark ? styles.errorTextDark : styles.errorTextLight
+                        ]}
                     >
                         {error}
                     </Text>
@@ -155,3 +156,41 @@ export default function InputField({
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        marginBottom: 18,
+    },
+    labelBase: {
+        fontSize: 11,
+        fontWeight: "bold",
+        letterSpacing: 1.2,
+        textTransform: "uppercase",
+        marginBottom: 8,
+    },
+    labelDark: {
+        color: "rgba(255,255,255,0.65)",
+    },
+    labelLight: {
+        color: Colors.neutral[700],
+    },
+    eyeBtn: {
+        paddingLeft: 8,
+    },
+    errorRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginTop: 6,
+        gap: 4,
+    },
+    errorTextBase: {
+        fontSize: 12,
+        fontWeight: "500",
+    },
+    errorTextDark: {
+        color: "#FCA5A5",
+    },
+    errorTextLight: {
+        color: Colors.status.error,
+    },
+});

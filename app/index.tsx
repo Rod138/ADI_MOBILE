@@ -2,7 +2,7 @@ import { Colors } from "@/constants/colors";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 // Punto de entrada — verifica si hay sesión
 // activa y redirige al destino correcto.
@@ -17,7 +17,7 @@ export default function Index() {
 
       if (token) {
         //  Hay sesión guardada : ir al home
-        router.replace("/(tabs)");
+        router.replace("/(tabs)" as any);
       } else {
         //  No hay sesión : ir al login
         router.replace("/login");
@@ -30,8 +30,17 @@ export default function Index() {
 
   // Pantalla de carga mientras verifica
   return (
-    <View className="flex-1 items-center justify-center bg-[#F9FAFB]">
+    <View style={styles.container}>
       <ActivityIndicator size="large" color={Colors.primary.main} />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.neutral[50], // "#F9FAFB"
+  },
+});
