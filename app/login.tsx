@@ -6,7 +6,6 @@ import { isFormValid, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, validateLoginForm }
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
     Image,
     KeyboardAvoidingView,
     Platform,
@@ -15,7 +14,7 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -61,11 +60,7 @@ export default function LoginScreen() {
     };
 
     const handleForgotPassword = () => {
-        Alert.alert(
-            "Recuperar contraseña",
-            "Contacta al administrador de tu condominio para restablecer tu acceso.",
-            [{ text: "Entendido" }]
-        );
+        router.push("/forgot-password");
     };
 
     return (

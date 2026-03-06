@@ -35,35 +35,33 @@ export function useAuth() {
         setIsLoading(true);
         setError(null);
 
-        try {
-            const response = await fetch(`${BASE_URL}/auth/login`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(credentials),
-            });
+        // TODO: reemplazar con llamada real cuando el endpoint esté listo
+        // POST ${BASE_URL}/auth/login  { email, password }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
 
-            const data = await response.json();
+        setIsLoading(false);
+        return {
+            token: "mock-token",
+            user: {
+                id: "1",
+                name: "Usuario Demo",
+                email: credentials.email,
+                role: "resident",
+                condominiumId: "condo-1",
+            },
+        };
+    };
 
-            if (!response.ok) {
-                const message =
-                    data?.message ||
-                    (response.status === 401
-                        ? "Correo o contraseña incorrectos."
-                        : "Error al iniciar sesión. Intenta de nuevo.");
-                setError(message);
-                return null;
-            }
+    const forgotPassword = async (email: string): Promise<boolean> => {
+        setIsLoading(true);
+        setError(null);
 
-            // Guardar token de forma segura
-            await SecureStore.setItemAsync("token", data.token);
+        // TODO: reemplazar con llamada real cuando el endpoint esté listo
+        // POST ${BASE_URL}/auth/forgot-password  { email }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
 
-            return data as AuthResponse;
-        } catch {
-            setError("No se pudo conectar al servidor. Verifica tu conexión.");
-            return null;
-        } finally {
-            setIsLoading(false);
-        }
+        setIsLoading(false);
+        return true;
     };
 
     const logout = async () => {
@@ -73,5 +71,5 @@ export function useAuth() {
 
     const clearError = () => setError(null);
 
-    return { login, logout, isLoading, error, clearError };
+    return { login, forgotPassword, logout, isLoading, error, clearError };
 }
