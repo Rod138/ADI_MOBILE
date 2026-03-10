@@ -8,12 +8,14 @@ export interface LoginCredentials {
 }
 
 export interface AuthUser {
-    id: string;
+    id: number;
     name: string;
+    ap: string;
+    am: string;
     email: string;
     phone: string;
+    dep_id: number;
     rol_id: number;
-    dep_id: string;
 }
 
 // Hook principal
@@ -29,7 +31,7 @@ export function useAuth() {
         try {
             const { data: user, error: dbError } = await supabase
                 .from("users")
-                .select("*")
+                .select("id, name, ap, am, email, phone, dep_id, rol_id")
                 .eq("email", credentials.email)
                 .eq("password", credentials.password)
                 .single();
@@ -44,8 +46,9 @@ export function useAuth() {
                 return null;
             }
 
-            // Guardar id de sesión de forma segura
+            // Guardar token e info de sesión de forma segura
             await SecureStore.setItemAsync("token", String(user.id));
+            await SecureStore.setItemAsync("session_user", JSON.stringify(user));
 
             return user as AuthUser;
         } catch {
@@ -56,9 +59,9 @@ export function useAuth() {
         }
     };
 
-    // ── Forgot password ────────────────────────
+    // Forgot password
     // TODO: implementar cuando el flujo de reset esté definido en Supabase
-    const forgotPassword = async (email: string): Promise<boolean> => {
+    const forgotPassword = async (_email: string): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
 
@@ -68,9 +71,10 @@ export function useAuth() {
         return true;
     };
 
-    // ── Logout ─────────────────────────────────
+    // Logout
     const logout = async () => {
         await SecureStore.deleteItemAsync("token");
+        await SecureStore.deleteItemAsync("session_user");
         // El componente que llame a logout debe hacer router.replace("/login")
     };
 
