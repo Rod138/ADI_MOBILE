@@ -4,10 +4,10 @@ export interface LoginFormErrors {
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-export const MAX_PASSWORD_LENGTH = 16;
+export const MAX_PASSWORD_LENGTH = 32;
 const MIN_PASSWORD_LENGTH = 8;
 const MIN_EMAIL_LENGTH = 6;
-export const MAX_EMAIL_LENGTH = 100;
+export const MAX_EMAIL_LENGTH = 320;
 
 export function validateEmail(email: string): string | undefined {
     if (!email.trim()) return "El correo es obligatorio.";
