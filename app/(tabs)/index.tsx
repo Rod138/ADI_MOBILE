@@ -114,7 +114,6 @@ function IncidentCard({ item }: { item: Incident }) {
                         <Text style={cardStyles.costLabel}>Costo:</Text>
                         <Text style={cardStyles.costValue}>${item.cost ?? 0}</Text>
                     </View>
-                    <Text style={cardStyles.incId}>#{item.id}</Text>
                 </View>
             </View>
         </View>

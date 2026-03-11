@@ -45,15 +45,6 @@ export default function TabsLayout() {
                     }}
                 />
                 <Tabs.Screen
-                    name="notifications"
-                    options={{
-                        title: "Notificaciones",
-                        tabBarIcon: ({ color, size }) => (
-                            <Ionicons name="notifications-outline" size={size} color={color} />
-                        ),
-                    }}
-                />
-                <Tabs.Screen
                     name="profile"
                     options={{
                         title: "Perfil",
@@ -63,6 +54,10 @@ export default function TabsLayout() {
                     }}
                 />
                 {/* Ocultas de la tab bar — solo accesibles por navegación */}
+                <Tabs.Screen
+                    name="notifications"
+                    options={{ href: null }}
+                />
                 <Tabs.Screen
                     name="change-password"
                     options={{ href: null }}

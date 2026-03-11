@@ -1,8 +1,10 @@
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
 import { useAuth } from "@/hooks/useAuth";
+import supabase from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import {
     ScrollView,
     StatusBar,
@@ -44,6 +46,20 @@ function ActionRow({ icon, label, onPress, danger = false }: {
 export default function ProfileScreen() {
     const { user, fullName, setUser } = useSession();
     const { logout } = useAuth();
+    const [departmentName, setDepartmentName] = useState<string>("");
+
+    useEffect(() => {
+        if (user?.dep_id) {
+            supabase
+                .from("departments")
+                .select("name")
+                .eq("id", user.dep_id)
+                .single()
+                .then(({ data }) => {
+                    if (data?.name) setDepartmentName(data.name);
+                });
+        }
+    }, [user?.dep_id]);
 
     const handleLogout = async () => {
         await logout();
@@ -51,10 +67,15 @@ export default function ProfileScreen() {
         router.replace("/login");
     };
 
-    const roleLabel = (rol: number) => {
-        if (rol === 1) return "Administrador";
-        if (rol === 2) return "Tesorero";
-        return "Residente";
+    // Mapeo completo según tabla roles: 1=residente, 2=tesorero, 3=admin, 4=tesorero y admin
+    const roleLabel = (rolId: number) => {
+        switch (rolId) {
+            case 1: return "Residente";
+            case 2: return "Tesorero";
+            case 3: return "Administrador";
+            case 4: return "Tesorero y Admin";
+            default: return "Sin rol";
+        }
     };
 
     return (
@@ -99,7 +120,11 @@ export default function ProfileScreen() {
                             <View style={styles.divider} />
                             <InfoRow icon="call-outline" label="Teléfono" value={user?.phone ?? ""} />
                             <View style={styles.divider} />
-                            <InfoRow icon="home-outline" label="Departamento" value={user?.dep_id ? `Depto. ${user.dep_id}` : ""} />
+                            <InfoRow
+                                icon="home-outline"
+                                label="Departamento"
+                                value={departmentName || (user?.dep_id ? `Depto. ${user.dep_id}` : "")}
+                            />
                         </View>
                     </View>
 
