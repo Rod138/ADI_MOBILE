@@ -24,9 +24,26 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.72;
 
-function formatDate(iso: string) {
+function formatDateTime(iso: string) {
     const d = new Date(iso);
-    return d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+    const date = d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+    const time = d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: true });
+    return { date, time };
+}
+
+// Colores por status (por nombre normalizado)
+function getStatusStyle(name: string): { color: string; bg: string; border: string; icon: any } {
+    const n = name?.toLowerCase() ?? "";
+    if (n.includes("resuel") || n.includes("complet")) {
+        return { color: "#34D399", bg: "rgba(5,150,105,0.15)", border: "rgba(52,211,153,0.35)", icon: "checkmark-circle-outline" };
+    }
+    if (n.includes("pend")) {
+        return { color: "#FBBF24", bg: "rgba(217,119,6,0.15)", border: "rgba(251,191,36,0.35)", icon: "time-outline" };
+    }
+    if (n.includes("cerr")) {
+        return { color: "#94A3B8", bg: "rgba(148,163,184,0.12)", border: "rgba(148,163,184,0.30)", icon: "lock-closed-outline" };
+    }
+    return { color: Colors.primary.light, bg: "rgba(59,130,246,0.14)", border: "rgba(59,130,246,0.35)", icon: "ellipse-outline" };
 }
 
 function IncidentCard({ item }: { item: Incident }) {
@@ -34,49 +51,71 @@ function IncidentCard({ item }: { item: Incident }) {
         ? `${item.users.name} ${item.users.ap}${item.users.am ? " " + item.users.am : ""}`.trim()
         : "—";
 
-    const statusName = item.inc_status?.name?.toLowerCase() ?? "";
-    const statusColor =
-        statusName.includes("resuel") ? Colors.status.success :
-            statusName.includes("pend") ? Colors.status.warning :
-                Colors.primary.light;
+    const statusName = item.inc_status?.name ?? "—";
+    const ss = getStatusStyle(statusName);
+    const { date, time } = formatDateTime(item.created_at);
 
     return (
         <View style={cardStyles.card}>
-            <View style={cardStyles.header}>
-                <View style={cardStyles.headerLeft}>
-                    <Text style={cardStyles.reportedBy} numberOfLines={1}>{reportedBy}</Text>
-                    <Text style={cardStyles.date}>{formatDate(item.created_at)}</Text>
-                </View>
-                <View style={[cardStyles.statusBadge, { borderColor: statusColor }]}>
-                    <View style={[cardStyles.statusDot, { backgroundColor: statusColor }]} />
-                    <Text style={[cardStyles.statusText, { color: statusColor }]}>
-                        {item.inc_status?.name ?? "—"}
-                    </Text>
-                </View>
-            </View>
+            {/* Barra lateral coloreada por status */}
+            <View style={[cardStyles.statusBar, { backgroundColor: ss.color }]} />
 
-            <View style={cardStyles.metaRow}>
-                <View style={cardStyles.metaItem}>
-                    <Ionicons name="grid-outline" size={12} color="rgba(255,255,255,0.45)" />
-                    <Text style={cardStyles.metaText}>{item.areas?.name ?? "—"}</Text>
+            <View style={cardStyles.inner}>
+                {/* ── Fila superior: avatar + quien reportó + status badge ── */}
+                <View style={cardStyles.topRow}>
+                    <View style={cardStyles.avatarCircle}>
+                        <Text style={cardStyles.avatarInitials}>
+                            {reportedBy.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+                        </Text>
+                    </View>
+                    <View style={cardStyles.reporterInfo}>
+                        <Text style={cardStyles.reportedBy} numberOfLines={1}>{reportedBy}</Text>
+                        <View style={cardStyles.dateTimeRow}>
+                            <Ionicons name="calendar-outline" size={11} color="rgba(255,255,255,0.40)" />
+                            <Text style={cardStyles.dateText}>{date}</Text>
+                            <View style={cardStyles.timeDot} />
+                            <Ionicons name="time-outline" size={11} color="rgba(255,255,255,0.40)" />
+                            <Text style={cardStyles.dateText}>{time}</Text>
+                        </View>
+                    </View>
+                    <View style={[cardStyles.statusBadge, { backgroundColor: ss.bg, borderColor: ss.border }]}>
+                        <Ionicons name={ss.icon} size={13} color={ss.color} />
+                        <Text style={[cardStyles.statusText, { color: ss.color }]}>{statusName}</Text>
+                    </View>
                 </View>
-                <View style={cardStyles.metaDot} />
-                <View style={cardStyles.metaItem}>
-                    <Ionicons name="alert-circle-outline" size={12} color="rgba(255,255,255,0.45)" />
-                    <Text style={cardStyles.metaText}>{item.inc_types?.name ?? "—"}</Text>
+
+                {/* ── Divisor ── */}
+                <View style={cardStyles.divider} />
+
+                {/* ── Meta chips: Área + Tipo ── */}
+                <View style={cardStyles.metaRow}>
+                    <View style={cardStyles.metaChip}>
+                        <Ionicons name="grid-outline" size={12} color={Colors.primary.light} />
+                        <Text style={cardStyles.metaChipText}>{item.areas?.name ?? "—"}</Text>
+                    </View>
+                    <View style={[cardStyles.metaChip, cardStyles.metaChipPurple]}>
+                        <Ionicons name="alert-circle-outline" size={12} color="#A78BFA" />
+                        <Text style={[cardStyles.metaChipText, { color: "#C4B5FD" }]}>{item.inc_types?.name ?? "—"}</Text>
+                    </View>
                 </View>
-            </View>
 
-            <Text style={cardStyles.description} numberOfLines={2}>{item.description}</Text>
+                {/* ── Descripción ── */}
+                <Text style={cardStyles.description} numberOfLines={3}>{item.description}</Text>
 
-            {item.image ? (
-                <Image source={{ uri: item.image }} style={cardStyles.image} resizeMode="cover" />
-            ) : null}
+                {/* ── Imagen (opcional) ── */}
+                {item.image ? (
+                    <Image source={{ uri: item.image }} style={cardStyles.image} resizeMode="cover" />
+                ) : null}
 
-            <View style={cardStyles.footer}>
-                <Text style={cardStyles.costText}>
-                    Costo: <Text style={cardStyles.costValue}>${item.cost ?? 0}</Text>
-                </Text>
+                {/* ── Footer: costo + ID ── */}
+                <View style={cardStyles.footer}>
+                    <View style={cardStyles.footerLeft}>
+                        <Ionicons name="cash-outline" size={13} color="rgba(255,255,255,0.35)" />
+                        <Text style={cardStyles.costLabel}>Costo:</Text>
+                        <Text style={cardStyles.costValue}>${item.cost ?? 0}</Text>
+                    </View>
+                    <Text style={cardStyles.incId}>#{item.id}</Text>
+                </View>
             </View>
         </View>
     );
@@ -93,15 +132,8 @@ export default function IncidentsScreen() {
     const drawerAnim = useRef(new Animated.Value(DRAWER_WIDTH)).current;
     const overlayAnim = useRef(new Animated.Value(0)).current;
 
-    // Carga inicial
-    useEffect(() => {
-        fetchIncidents();
-    }, []);
-
-    // Recarga cuando cambian filtros
-    useEffect(() => {
-        fetchIncidents(activeStatusId, activeAreaId);
-    }, [activeStatusId, activeAreaId]);
+    useEffect(() => { fetchIncidents(); }, []);
+    useEffect(() => { fetchIncidents(activeStatusId, activeAreaId); }, [activeStatusId, activeAreaId]);
 
     const openDrawer = () => {
         setDrawerOpen(true);
@@ -118,14 +150,10 @@ export default function IncidentsScreen() {
         ]).start(() => setDrawerOpen(false));
     };
 
-    const selectArea = (id?: number) => {
-        setActiveAreaId(id);
-        closeDrawer();
-    };
+    const selectArea = (id?: number) => { setActiveAreaId(id); closeDrawer(); };
+    const selectStatus = (id?: number) => { setActiveStatusId(id); };
 
-    const selectStatus = (id?: number) => {
-        setActiveStatusId(id);
-    };
+    const activeAreaName = areas.find((a) => a.id === activeAreaId)?.name;
 
     return (
         <View style={styles.root}>
@@ -134,11 +162,15 @@ export default function IncidentsScreen() {
             <View style={styles.blobBL} />
 
             <SafeAreaView style={styles.safeArea}>
-                {/* HEADER */}
+                {/* ── HEADER ── */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
                         <View style={styles.logoCircle}>
-                            <Ionicons name="shield-checkmark" size={18} color={Colors.primary.light} />
+                            <Image
+                                source={require("@/assets/images/logo.png")}
+                                style={styles.logoImg}
+                                resizeMode="contain"
+                            />
                         </View>
                         <Text style={styles.headerTitle}>ADI</Text>
                     </View>
@@ -150,73 +182,99 @@ export default function IncidentsScreen() {
                             <Ionicons name="person-circle-outline" size={28} color="rgba(255,255,255,0.75)" />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={openDrawer} style={styles.headerIconBtn}>
-                            <Ionicons name="options-outline" size={24} color="rgba(255,255,255,0.75)" />
+                            <Ionicons
+                                name="options-outline"
+                                size={24}
+                                color={activeAreaId !== undefined ? Colors.primary.light : "rgba(255,255,255,0.75)"}
+                            />
+                            {activeAreaId !== undefined && <View style={styles.filterDot} />}
                         </TouchableOpacity>
                     </View>
                 </View>
 
-                {/* STATUS TABS */}
+                {/* ── STATUS TABS (desde BD) ── */}
                 {catalogsLoading ? (
                     <View style={styles.tabsLoading}>
                         <ActivityIndicator size="small" color="rgba(255,255,255,0.3)" />
                     </View>
                 ) : (
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.statusTabsContainer}
-                    >
-                        {/* Tab "Todas" — solo texto, sin fondo cuando está inactivo */}
-                        <TouchableOpacity
-                            onPress={() => selectStatus(undefined)}
-                            style={styles.statusTab}
-                            activeOpacity={0.7}
+                    <View style={styles.tabsWrapper}>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.statusTabsContainer}
                         >
-                            <Text style={[
-                                styles.statusTabText,
-                                activeStatusId === undefined && styles.statusTabTextActive,
-                            ]}>
-                                Todas
-                            </Text>
-                            {activeStatusId === undefined && <View style={styles.statusTabUnderline} />}
-                        </TouchableOpacity>
-
-                        {statuses.map((s) => (
+                            {/* Tab "Todas" */}
                             <TouchableOpacity
-                                key={s.id}
-                                onPress={() => selectStatus(s.id)}
-                                style={styles.statusTab}
+                                onPress={() => selectStatus(undefined)}
+                                style={[styles.statusTab, activeStatusId === undefined && styles.statusTabAllActive]}
                                 activeOpacity={0.7}
                             >
-                                <Text style={[
-                                    styles.statusTabText,
-                                    activeStatusId === s.id && styles.statusTabTextActive,
-                                ]}>
-                                    {s.name}
+                                <Text style={[styles.statusTabText, activeStatusId === undefined && styles.statusTabTextAllActive]}>
+                                    Todas
                                 </Text>
-                                {activeStatusId === s.id && <View style={styles.statusTabUnderline} />}
                             </TouchableOpacity>
-                        ))}
-                    </ScrollView>
+
+                            {/* Tabs de status desde BD */}
+                            {statuses.map((s) => {
+                                const ss = getStatusStyle(s.name);
+                                const isActive = activeStatusId === s.id;
+                                return (
+                                    <TouchableOpacity
+                                        key={s.id}
+                                        onPress={() => selectStatus(s.id)}
+                                        style={[
+                                            styles.statusTab,
+                                            isActive && { borderColor: ss.border, backgroundColor: ss.bg },
+                                        ]}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Ionicons
+                                            name={ss.icon}
+                                            size={13}
+                                            color={isActive ? ss.color : "rgba(255,255,255,0.35)"}
+                                            style={{ marginRight: 5 }}
+                                        />
+                                        <Text style={[
+                                            styles.statusTabText,
+                                            isActive && [styles.statusTabTextActive, { color: ss.color }],
+                                        ]}>
+                                            {s.name}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
                 )}
 
-                {/* Filtro activo por área */}
+                {/* ── Banner filtro activo por área ── */}
                 {activeAreaId !== undefined && (
                     <View style={styles.activeFilterBanner}>
                         <Ionicons name="funnel" size={12} color={Colors.primary.light} />
-                        <Text style={styles.activeFilterText}>
-                            Área: {areas.find((a) => a.id === activeAreaId)?.name}
-                        </Text>
+                        <Text style={styles.activeFilterText}>Área: {activeAreaName}</Text>
                         <TouchableOpacity onPress={() => setActiveAreaId(undefined)}>
                             <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.5)" />
                         </TouchableOpacity>
                     </View>
                 )}
 
-                {/* LISTA */}
+                {/* ── Contador de resultados ── */}
+                {!isLoading && !error && (
+                    <View style={styles.resultsBar}>
+                        <Text style={styles.resultsText}>
+                            {incidents.length} {incidents.length === 1 ? "incidencia" : "incidencias"}
+                            {activeStatusId !== undefined ? ` · ${statuses.find(s => s.id === activeStatusId)?.name}` : ""}
+                            {activeAreaId !== undefined ? ` · ${activeAreaName}` : ""}
+                        </Text>
+                    </View>
+                )}
+
+                {/* ── LISTA ── */}
                 {isLoading ? (
                     <View style={styles.centered}>
                         <ActivityIndicator size="large" color={Colors.primary.light} />
+                        <Text style={styles.emptyText}>Cargando incidencias...</Text>
                     </View>
                 ) : error ? (
                     <View style={styles.centered}>
@@ -225,8 +283,9 @@ export default function IncidentsScreen() {
                     </View>
                 ) : incidents.length === 0 ? (
                     <View style={styles.centered}>
-                        <Ionicons name="document-text-outline" size={40} color="rgba(255,255,255,0.2)" />
-                        <Text style={styles.emptyText}>Sin incidencias</Text>
+                        <Ionicons name="document-text-outline" size={44} color="rgba(255,255,255,0.15)" />
+                        <Text style={styles.emptyTitle}>Sin incidencias</Text>
+                        <Text style={styles.emptyText}>No hay registros con los filtros actuales.</Text>
                     </View>
                 ) : (
                     <FlatList
@@ -241,13 +300,12 @@ export default function IncidentsScreen() {
                 )}
             </SafeAreaView>
 
-            {/* DRAWER FILTRO POR ÁREA */}
+            {/* ── DRAWER FILTRO POR ÁREA ── */}
             {drawerOpen && (
                 <View style={StyleSheet.absoluteFillObject}>
                     <Animated.View style={[styles.drawerOverlay, { opacity: overlayAnim }]}>
                         <Pressable style={StyleSheet.absoluteFillObject} onPress={closeDrawer} />
                     </Animated.View>
-
                     <Animated.View style={[styles.drawer, { transform: [{ translateX: drawerAnim }] }]}>
                         <SafeAreaView style={styles.drawerSafe}>
                             <View style={styles.drawerHeader}>
@@ -256,7 +314,6 @@ export default function IncidentsScreen() {
                                     <Ionicons name="close" size={22} color="rgba(255,255,255,0.6)" />
                                 </TouchableOpacity>
                             </View>
-
                             <ScrollView showsVerticalScrollIndicator={false}>
                                 <TouchableOpacity
                                     style={[styles.drawerItem, activeAreaId === undefined && styles.drawerItemActive]}
@@ -271,7 +328,6 @@ export default function IncidentsScreen() {
                                         <Ionicons name="checkmark" size={16} color={Colors.primary.light} style={{ marginLeft: "auto" }} />
                                     )}
                                 </TouchableOpacity>
-
                                 {areas.map((area) => (
                                     <TouchableOpacity
                                         key={area.id}
@@ -297,46 +353,63 @@ export default function IncidentsScreen() {
     );
 }
 
+// ─── Card Styles ───────────────────────────────────────────
 const cardStyles = StyleSheet.create({
     card: {
+        flexDirection: "row",
         backgroundColor: "rgba(255,255,255,0.06)",
         borderRadius: 20,
         borderWidth: 1,
         borderColor: "rgba(255,255,255,0.10)",
-        padding: 16,
         marginBottom: 12,
+        overflow: "hidden",
     },
-    header: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        marginBottom: 8,
+    statusBar: { width: 4 },
+    inner: { flex: 1, padding: 14 },
+    topRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+    avatarCircle: {
+        width: 38, height: 38, borderRadius: 19,
+        backgroundColor: "rgba(59,130,246,0.20)",
+        borderWidth: 1, borderColor: "rgba(59,130,246,0.30)",
+        alignItems: "center", justifyContent: "center", flexShrink: 0,
     },
-    headerLeft: { flex: 1, marginRight: 12 },
-    reportedBy: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.white },
-    date: { fontFamily: "Outfit_400Regular", fontSize: 11, color: "rgba(255,255,255,0.40)", marginTop: 2 },
+    avatarInitials: { fontFamily: "Outfit_700Bold", fontSize: 13, color: Colors.primary.light },
+    reporterInfo: { flex: 1, gap: 3 },
+    reportedBy: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: "#FFFFFF" },
+    dateTimeRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+    dateText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: "rgba(255,255,255,0.42)" },
+    timeDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: "rgba(255,255,255,0.20)" },
     statusBadge: {
         flexDirection: "row", alignItems: "center", gap: 5,
-        borderWidth: 1, borderRadius: 20,
-        paddingHorizontal: 10, paddingVertical: 4,
-        backgroundColor: "rgba(255,255,255,0.04)",
+        borderWidth: 1, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 5, flexShrink: 0,
     },
-    statusDot: { width: 6, height: 6, borderRadius: 3 },
-    statusText: { fontFamily: "Outfit_500Medium", fontSize: 11 },
-    metaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-    metaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-    metaDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: "rgba(255,255,255,0.2)" },
-    metaText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: "rgba(255,255,255,0.50)" },
+    statusText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
+    divider: { height: 1, backgroundColor: "rgba(255,255,255,0.07)", marginBottom: 10 },
+    metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 },
+    metaChip: {
+        flexDirection: "row", alignItems: "center", gap: 5,
+        backgroundColor: "rgba(59,130,246,0.10)", borderRadius: 8,
+        paddingHorizontal: 8, paddingVertical: 4,
+        borderWidth: 1, borderColor: "rgba(59,130,246,0.20)",
+    },
+    metaChipPurple: { backgroundColor: "rgba(109,40,217,0.12)", borderColor: "rgba(167,139,250,0.20)" },
+    metaChipText: { fontFamily: "Outfit_500Medium", fontSize: 11, color: "rgba(255,255,255,0.70)" },
     description: {
         fontFamily: "Outfit_400Regular", fontSize: 13,
-        color: "rgba(255,255,255,0.70)", lineHeight: 20, marginBottom: 10,
+        color: "rgba(255,255,255,0.72)", lineHeight: 20, marginBottom: 10,
     },
     image: { width: "100%", height: 160, borderRadius: 12, marginBottom: 10 },
-    footer: { borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.07)", paddingTop: 10 },
-    costText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: "rgba(255,255,255,0.40)" },
-    costValue: { fontFamily: "Outfit_600SemiBold", color: "rgba(255,255,255,0.65)" },
+    footer: {
+        flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+        borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.07)", paddingTop: 8,
+    },
+    footerLeft: { flexDirection: "row", alignItems: "center", gap: 5 },
+    costLabel: { fontFamily: "Outfit_400Regular", fontSize: 12, color: "rgba(255,255,255,0.38)" },
+    costValue: { fontFamily: "Outfit_700Bold", fontSize: 12, color: "rgba(255,255,255,0.65)" },
+    incId: { fontFamily: "Outfit_400Regular", fontSize: 11, color: "rgba(255,255,255,0.25)" },
 });
 
+// ─── Screen Styles ─────────────────────────────────────────
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: "#0C1F5C" },
     blobTR: {
@@ -352,69 +425,56 @@ const styles = StyleSheet.create({
     safeArea: { flex: 1 },
     header: {
         flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-        paddingHorizontal: 20, paddingVertical: 12,
+        paddingHorizontal: 20, paddingVertical: 10,
         borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.07)",
     },
     headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
     logoCircle: {
-        width: 34, height: 34, borderRadius: 17,
-        backgroundColor: "rgba(59,130,246,0.15)",
-        borderWidth: 1, borderColor: "rgba(59,130,246,0.3)",
-        alignItems: "center", justifyContent: "center",
+        width: 36, height: 36, borderRadius: 18,
+        backgroundColor: "#FFFFFF",
+        alignItems: "center", justifyContent: "center", overflow: "hidden",
     },
-    headerTitle: { fontFamily: "Outfit_800ExtraBold", fontSize: 20, color: Colors.white, letterSpacing: 2 },
+    logoImg: { width: 32, height: 32 },
+    headerTitle: { fontFamily: "Outfit_800ExtraBold", fontSize: 20, color: "#FFFFFF", letterSpacing: 2 },
     headerRight: { flexDirection: "row", alignItems: "center", gap: 4 },
-    headerIconBtn: { padding: 6 },
-
-    // Status tabs — estilo underline, sin rectángulo
-    tabsLoading: { height: 44, alignItems: "center", justifyContent: "center" },
-    statusTabsContainer: {
-        paddingHorizontal: 20,
-        paddingTop: 4,
-        paddingBottom: 0,
-        gap: 4,
-    },
-    statusTab: {
-        paddingHorizontal: 14,
-        paddingBottom: 10,
-        paddingTop: 6,
-        alignItems: "center",
-        position: "relative",
-    },
-    statusTabText: {
-        fontFamily: "Outfit_500Medium",
-        fontSize: 13,
-        color: "rgba(255,255,255,0.38)",
-    },
-    statusTabTextActive: {
-        fontFamily: "Outfit_700Bold",
-        color: Colors.white,
-    },
-    statusTabUnderline: {
-        position: "absolute",
-        bottom: 0,
-        left: 14,
-        right: 14,
-        height: 2.5,
-        borderRadius: 2,
+    headerIconBtn: { padding: 6, position: "relative" },
+    filterDot: {
+        position: "absolute", top: 4, right: 4,
+        width: 8, height: 8, borderRadius: 4,
         backgroundColor: Colors.primary.light,
+        borderWidth: 1.5, borderColor: "#0C1F5C",
     },
-
-    // Filtro activo
+    tabsLoading: { height: 54, alignItems: "center", justifyContent: "center" },
+    tabsWrapper: { borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.07)" },
+    statusTabsContainer: { paddingHorizontal: 16, paddingVertical: 8, gap: 6, alignItems: "center" },
+    statusTab: {
+        flexDirection: "row", alignItems: "center",
+        paddingHorizontal: 13, paddingVertical: 7,
+        borderRadius: 20, borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.10)",
+        backgroundColor: "rgba(255,255,255,0.05)",
+    },
+    statusTabAllActive: {
+        borderColor: "rgba(59,130,246,0.45)",
+        backgroundColor: "rgba(59,130,246,0.15)",
+    },
+    statusTabText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: "rgba(255,255,255,0.42)" },
+    statusTabTextAllActive: { fontFamily: "Outfit_700Bold", color: Colors.primary.light },
+    statusTabTextActive: { fontFamily: "Outfit_700Bold" },
     activeFilterBanner: {
         flexDirection: "row", alignItems: "center", gap: 6,
-        marginHorizontal: 16, marginBottom: 8,
+        marginHorizontal: 16, marginTop: 8,
         paddingHorizontal: 12, paddingVertical: 7,
         backgroundColor: "rgba(59,130,246,0.12)",
         borderRadius: 10, borderWidth: 1, borderColor: "rgba(59,130,246,0.25)",
     },
     activeFilterText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.primary.light, flex: 1 },
-
-    listContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20 },
-    centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-    emptyText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: "rgba(255,255,255,0.35)" },
-
-    // Drawer
+    resultsBar: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 2 },
+    resultsText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: "rgba(255,255,255,0.30)" },
+    listContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 20 },
+    centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
+    emptyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 16, color: "rgba(255,255,255,0.40)" },
+    emptyText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: "rgba(255,255,255,0.28)", textAlign: "center" },
     drawerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.55)" },
     drawer: {
         position: "absolute", top: 0, bottom: 0, right: 0, width: DRAWER_WIDTH,
@@ -429,7 +489,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20, paddingVertical: 18,
         borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)",
     },
-    drawerTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.white },
+    drawerTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: "#FFFFFF" },
     drawerItem: {
         flexDirection: "row", alignItems: "center", gap: 12,
         paddingHorizontal: 20, paddingVertical: 16,
@@ -437,5 +497,5 @@ const styles = StyleSheet.create({
     },
     drawerItemActive: { backgroundColor: "rgba(59,130,246,0.10)" },
     drawerItemText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: "rgba(255,255,255,0.60)" },
-    drawerItemTextActive: { fontFamily: "Outfit_600SemiBold", color: Colors.white },
+    drawerItemTextActive: { fontFamily: "Outfit_600SemiBold", color: "#FFFFFF" },
 });
