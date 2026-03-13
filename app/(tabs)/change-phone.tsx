@@ -33,25 +33,26 @@ export default function ChangePhoneScreen() {
     };
 
     return (
-        <ScreenShell scroll>
-            <BackButton label="Volver al perfil" onPress={() => router.back()} />
+        <ScreenShell theme="light" scroll>
+            <BackButton theme="light" label="Volver al perfil" onPress={() => router.back()} />
 
             <FormPageHeader
+                theme="light"
                 icon="phone-portrait-outline"
                 title="Cambiar teléfono"
                 subtitle={user?.phone ? `Actual: ${user.phone}` : undefined}
             />
 
-            <SectionCard>
-                {error && <StatusBanner type="error" message={error} />}
-                {success && <StatusBanner type="success" message={success} />}
+            <SectionCard theme="light">
+                {error && <StatusBanner theme="light" type="error" message={error} />}
+                {success && <StatusBanner theme="light" type="success" message={success} />}
 
                 <InputField
+                    theme="light"
                     label="Nuevo teléfono"
                     placeholder="10 dígitos"
                     leftIcon="call-outline"
                     keyboardType="phone-pad"
-                    dark
                     returnKeyType="done"
                     onSubmitEditing={handleSubmit}
                     value={phone}
@@ -69,7 +70,6 @@ export default function ChangePhoneScreen() {
                     onPress={handleSubmit}
                     isLoading={isLoading}
                     disabled={isLoading}
-                    variant="light"
                 />
             </SectionCard>
         </ScreenShell>

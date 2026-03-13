@@ -16,6 +16,9 @@ interface InputFieldProps extends TextInputProps {
     error?: string;
     leftIcon?: keyof typeof Ionicons.glyphMap;
     isPassword?: boolean;
+    /** "dark" = sobre fondo oscuro (login/forgot), "light" = sobre fondo claro (tabs) */
+    theme?: "dark" | "light";
+    /** @deprecated usar theme="dark" */
     dark?: boolean;
 }
 
@@ -24,12 +27,16 @@ export default function InputField({
     error,
     leftIcon,
     isPassword = false,
+    theme,
     dark = false,
     value,
     onFocus,
     onBlur,
     ...rest
 }: InputFieldProps) {
+    // Retrocompatibilidad: si pasan dark=true sin theme, usar dark
+    const isDark = theme ? theme === "dark" : dark;
+
     const [isFocused, setIsFocused] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const focusAnim = useRef(new Animated.Value(0)).current;
@@ -46,111 +53,72 @@ export default function InputField({
         onBlur?.(e);
     };
 
-    // Animated border & background — these can't be className, need interpolation
     const borderColor = focusAnim.interpolate({
         inputRange: [0, 1],
         outputRange: error
-            ? ["#FCA5A5", "#FCA5A5"]
-            : dark
+            ? (isDark ? ["#FCA5A5", "#FCA5A5"] : ["#FECACA", "#EF4444"])
+            : isDark
                 ? ["rgba(255,255,255,0.18)", "rgba(255,255,255,0.85)"]
-                : [Colors.neutral[200], Colors.primary.light],
+                : [Colors.screen.border, Colors.primary.light],
     });
 
     const backgroundColor = focusAnim.interpolate({
         inputRange: [0, 1],
-        outputRange: dark
+        outputRange: isDark
             ? ["rgba(255,255,255,0.07)", "rgba(255,255,255,0.14)"]
-            : ["#FFFFFF", "#F0F7FF"],
+            : [Colors.screen.card, "#F0F6FF"],
     });
 
     const iconColor = error
-        ? dark ? "#FCA5A5" : Colors.status.error
+        ? (isDark ? "#FCA5A5" : Colors.status.error)
         : isFocused
-            ? dark ? "#FFFFFF" : Colors.primary.light
-            : dark ? "rgba(255,255,255,0.40)" : Colors.neutral[400];
+            ? (isDark ? "#FFFFFF" : Colors.primary.light)
+            : (isDark ? "rgba(255,255,255,0.40)" : Colors.screen.iconMuted);
+
+    const labelColor = isDark ? "rgba(255,255,255,0.65)" : Colors.screen.textSecondary;
+    const textColor = isDark ? "#FFFFFF" : Colors.screen.textPrimary;
+    const placeholderColor = isDark ? "rgba(255,255,255,0.32)" : Colors.screen.textMuted;
+    const errorColor = isDark ? "#FCA5A5" : Colors.status.error;
 
     return (
         <View style={styles.container}>
-            {/* Label */}
-            <Text
-                style={[
-                    styles.labelBase,
-                    dark ? styles.labelDark : styles.labelLight
-                ]}
-            >
-                {label}
-            </Text>
+            <Text style={[styles.label, { color: labelColor }]}>{label}</Text>
 
-            {/* Animated container — uses style prop for animated values */}
-            <Animated.View
-                style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    borderRadius: 14,
-                    paddingHorizontal: 16,
-                    height: 54,
-                    borderWidth: 1.5,
-                    borderColor,
-                    backgroundColor,
-                }}
-            >
+            <Animated.View style={{
+                flexDirection: "row", alignItems: "center",
+                borderRadius: 12, paddingHorizontal: 14, height: 52,
+                borderWidth: 1.5, borderColor, backgroundColor,
+            }}>
                 {leftIcon && (
-                    <Ionicons
-                        name={leftIcon}
-                        size={18}
-                        color={iconColor}
-                        style={{ marginRight: 12 }}
-                    />
+                    <Ionicons name={leftIcon} size={18} color={iconColor} style={{ marginRight: 10 }} />
                 )}
-
                 <TextInput
-                    style={{
-                        flex: 1,
-                        fontSize: 15,
-                        fontWeight: "500",
-                        color: dark ? "#FFFFFF" : Colors.neutral[900],
-                    }}
-                    placeholderTextColor={
-                        dark ? "rgba(255,255,255,0.32)" : Colors.neutral[400]
-                    }
+                    style={{ flex: 1, fontSize: 15, fontFamily: "Outfit_400Regular", color: textColor }}
+                    placeholderTextColor={placeholderColor}
                     secureTextEntry={isPassword && !showPassword}
                     value={value}
                     onFocus={handleFocus}
                     onBlur={handleBlur}
                     {...rest}
                 />
-
                 {isPassword && (
                     <TouchableOpacity
                         onPress={() => setShowPassword((v) => !v)}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        style={styles.eyeBtn}
                     >
                         <Ionicons
                             name={showPassword ? "eye-off-outline" : "eye-outline"}
                             size={18}
-                            color={dark ? "rgba(255,255,255,0.45)" : Colors.neutral[400]}
+                            color={isDark ? "rgba(255,255,255,0.45)" : Colors.screen.iconMuted}
                         />
                     </TouchableOpacity>
                 )}
             </Animated.View>
 
-            {/* Error */}
             {error && (
                 <View style={styles.errorRow}>
-                    <Ionicons
-                        name="alert-circle-outline"
-                        size={12}
-                        color={dark ? "#FCA5A5" : Colors.status.error}
-                    />
-                    <Text
-                        style={[
-                            styles.errorTextBase,
-                            dark ? styles.errorTextDark : styles.errorTextLight
-                        ]}
-                    >
-                        {error}
-                    </Text>
+                    <Ionicons name="alert-circle-outline" size={12} color={errorColor} />
+                    <Text style={[styles.errorText, { color: errorColor }]}>{error}</Text>
                 </View>
             )}
         </View>
@@ -158,39 +126,14 @@ export default function InputField({
 }
 
 const styles = StyleSheet.create({
-    container: {
-        marginBottom: 18,
-    },
-    labelBase: {
+    container: { marginBottom: 18 },
+    label: {
+        fontFamily: "Outfit_700Bold",
         fontSize: 11,
-        fontWeight: "bold",
         letterSpacing: 1.2,
         textTransform: "uppercase",
         marginBottom: 8,
     },
-    labelDark: {
-        color: "rgba(255,255,255,0.65)",
-    },
-    labelLight: {
-        color: Colors.neutral[700],
-    },
-    eyeBtn: {
-        paddingLeft: 8,
-    },
-    errorRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginTop: 6,
-        gap: 4,
-    },
-    errorTextBase: {
-        fontSize: 12,
-        fontWeight: "500",
-    },
-    errorTextDark: {
-        color: "#FCA5A5",
-    },
-    errorTextLight: {
-        color: Colors.status.error,
-    },
+    errorRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
+    errorText: { fontFamily: "Outfit_500Medium", fontSize: 12 },
 });

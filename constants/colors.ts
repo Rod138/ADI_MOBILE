@@ -1,26 +1,22 @@
-// ADI 
 export const Colors = {
-    // Azul Institucional
     primary: {
-        main: "#1E3A8A",   // Azul Principal — botones, nav, títulos
-        light: "#3B82F6",  // Azul Claro — estados activos, links
-        soft: "#DBEAFE",   // Fondo Suave — cards, highlights
+        main: "#1E3A8A",
+        light: "#3B82F6",
+        soft: "#DBEAFE",
     },
-
-    // Violeta Tecnológico
     secondary: {
-        main: "#6D28D9",   // Módulos IA, badges premium
-        light: "#8B5CF6",  // Hover, íconos analíticos
-        soft: "#EDE9FE",   // Paneles de análisis
+        main: "#6D28D9",
+        light: "#8B5CF6",
+        soft: "#EDE9FE",
     },
 
     // Neutros
     neutral: {
-        900: "#111827",   // Texto principal
-        700: "#374151",   // Subtítulos, descripciones
-        400: "#9CA3AF",   // Placeholders, íconos sutiles
-        200: "#E5E7EB",   // Divisores, bordes
-        50: "#F9FAFB",   // Fondo base de página
+        900: "#111827",
+        700: "#374151",
+        400: "#9CA3AF",
+        200: "#E5E7EB",
+        50: "#F9FAFB",
     },
 
     // Estados funcionales
@@ -33,4 +29,18 @@ export const Colors = {
 
     // Blancos
     white: "#FFFFFF",
+
+    screen: {
+        bg: "#EEF2F7",
+        card: "#FFFFFF",
+        border: "#D1D9E6",
+        chipBlue: "#E6ECF5",
+        chipBlueTxt: "#1E3A8A",
+        chipPurple: "#EDE9FE",
+        chipPurpleTxt: "#5B21B6",
+        textPrimary: "#1E2D4A",
+        textSecondary: "#6B7A99",
+        textMuted: "#9AA3B8",
+        iconMuted: "#9AA3B8",
+    },
 } as const;

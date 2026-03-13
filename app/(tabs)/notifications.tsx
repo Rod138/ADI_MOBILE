@@ -4,18 +4,13 @@ import { useSession } from "@/context/AuthContext";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Ionicons } from "@expo/vector-icons";
 import {
-    ActivityIndicator,
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+    ActivityIndicator, FlatList, StyleSheet,
+    Text, TouchableOpacity, View,
 } from "react-native";
 
 function formatDate(iso: string) {
     const d = new Date(iso);
-    const now = new Date();
-    const diffHrs = (now.getTime() - d.getTime()) / (1000 * 60 * 60);
+    const diffHrs = (Date.now() - d.getTime()) / 3600000;
     if (diffHrs < 1) return "Hace unos minutos";
     if (diffHrs < 24) return `Hace ${Math.floor(diffHrs)}h`;
     if (diffHrs < 48) return "Ayer";
@@ -27,9 +22,9 @@ function NotificationCard({ item }: { item: any }) {
         <View style={cardStyles.card}>
             <View style={cardStyles.iconCol}>
                 <View style={cardStyles.iconCircle}>
-                    <Ionicons name="notifications" size={18} color={Colors.primary.light} />
+                    <Ionicons name="notifications" size={16} color={Colors.primary.main} />
                 </View>
-                <View style={cardStyles.iconLine} />
+                <View style={cardStyles.line} />
             </View>
             <View style={cardStyles.content}>
                 <View style={cardStyles.topRow}>
@@ -37,9 +32,9 @@ function NotificationCard({ item }: { item: any }) {
                     <Text style={cardStyles.time}>{formatDate(item.created_at)}</Text>
                 </View>
                 <Text style={cardStyles.description} numberOfLines={3}>{item.description}</Text>
-                <View style={cardStyles.incRef}>
-                    <Ionicons name="link-outline" size={11} color="rgba(255,255,255,0.30)" />
-                    <Text style={cardStyles.incRefText}>Incidencia #{item.inc_id}</Text>
+                <View style={cardStyles.ref}>
+                    <Ionicons name="link-outline" size={11} color={Colors.screen.textMuted} />
+                    <Text style={cardStyles.refText}>Incidencia #{item.inc_id}</Text>
                 </View>
             </View>
         </View>
@@ -51,8 +46,9 @@ export default function NotificationsScreen() {
     const { notifications, isLoading, error, refetch } = useNotifications(user?.id ?? 0);
 
     return (
-        <ScreenShell blobBottomLeft>
+        <ScreenShell theme="light">
             <ScreenHeader
+                theme="light"
                 title="Notificaciones"
                 logoIcon="notifications"
                 rightActions={[{ icon: "refresh-outline", onPress: refetch }]}
@@ -64,7 +60,7 @@ export default function NotificationsScreen() {
                 </View>
             ) : error ? (
                 <View style={styles.centered}>
-                    <Ionicons name="cloud-offline-outline" size={44} color="rgba(255,255,255,0.20)" />
+                    <Ionicons name="cloud-offline-outline" size={44} color={Colors.screen.textMuted} />
                     <Text style={styles.emptyText}>{error}</Text>
                     <TouchableOpacity onPress={refetch} style={styles.retryBtn}>
                         <Text style={styles.retryText}>Reintentar</Text>
@@ -72,7 +68,7 @@ export default function NotificationsScreen() {
                 </View>
             ) : notifications.length === 0 ? (
                 <View style={styles.centered}>
-                    <Ionicons name="notifications-off-outline" size={44} color="rgba(255,255,255,0.18)" />
+                    <Ionicons name="notifications-off-outline" size={44} color={Colors.screen.textMuted} />
                     <Text style={styles.emptyTitle}>Sin notificaciones</Text>
                     <Text style={styles.emptyText}>Aquí aparecerán las actualizaciones de tus incidencias.</Text>
                 </View>
@@ -81,7 +77,7 @@ export default function NotificationsScreen() {
                     data={notifications}
                     keyExtractor={(n) => String(n.id)}
                     renderItem={({ item }) => <NotificationCard item={item} />}
-                    contentContainerStyle={styles.listContent}
+                    contentContainerStyle={styles.list}
                     showsVerticalScrollIndicator={false}
                     onRefresh={refetch}
                     refreshing={isLoading}
@@ -92,36 +88,44 @@ export default function NotificationsScreen() {
 }
 
 const cardStyles = StyleSheet.create({
-    card: { flexDirection: "row", gap: 14, paddingRight: 4, marginBottom: 4 },
-    iconCol: { alignItems: "center", width: 40 },
+    card: { flexDirection: "row", gap: 12, paddingRight: 4, marginBottom: 2 },
+    iconCol: { alignItems: "center", width: 38 },
     iconCircle: {
-        width: 40, height: 40, borderRadius: 20,
-        backgroundColor: "rgba(59,130,246,0.14)",
-        borderWidth: 1, borderColor: "rgba(59,130,246,0.28)",
+        width: 38, height: 38, borderRadius: 19,
+        backgroundColor: Colors.screen.chipBlue,
+        borderWidth: 1, borderColor: Colors.screen.border,
         alignItems: "center", justifyContent: "center",
     },
-    iconLine: { flex: 1, width: 1.5, backgroundColor: "rgba(255,255,255,0.07)", marginTop: 6 },
+    line: { flex: 1, width: 1, backgroundColor: Colors.screen.border, marginTop: 4 },
     content: {
-        flex: 1, backgroundColor: "rgba(255,255,255,0.05)",
-        borderRadius: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+        flex: 1, backgroundColor: Colors.screen.card,
+        borderRadius: 14, borderWidth: 1, borderColor: Colors.screen.border,
         padding: 14, marginBottom: 10,
+        shadowColor: "#1E2D4A", shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
     },
-    topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6, gap: 8 },
-    title: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.white, flex: 1 },
-    time: { fontFamily: "Outfit_400Regular", fontSize: 11, color: "rgba(255,255,255,0.35)" },
-    description: { fontFamily: "Outfit_400Regular", fontSize: 13, color: "rgba(255,255,255,0.60)", lineHeight: 20, marginBottom: 8 },
-    incRef: { flexDirection: "row", alignItems: "center", gap: 4 },
-    incRefText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: "rgba(255,255,255,0.28)" },
+    topRow: {
+        flexDirection: "row", justifyContent: "space-between",
+        alignItems: "flex-start", marginBottom: 6, gap: 8,
+    },
+    title: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textPrimary, flex: 1 },
+    time: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
+    description: {
+        fontFamily: "Outfit_400Regular", fontSize: 13,
+        color: Colors.screen.textSecondary, lineHeight: 20, marginBottom: 8,
+    },
+    ref: { flexDirection: "row", alignItems: "center", gap: 4 },
+    refText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
 });
 
 const styles = StyleSheet.create({
     centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 40 },
-    emptyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 16, color: "rgba(255,255,255,0.45)" },
-    emptyText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: "rgba(255,255,255,0.30)", textAlign: "center", lineHeight: 20 },
+    emptyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 16, color: Colors.screen.textSecondary },
+    emptyText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: Colors.screen.textMuted, textAlign: "center", lineHeight: 20 },
     retryBtn: {
         marginTop: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20,
-        borderWidth: 1, borderColor: "rgba(59,130,246,0.35)", backgroundColor: "rgba(59,130,246,0.10)",
+        borderWidth: 1, borderColor: Colors.screen.border, backgroundColor: Colors.screen.chipBlue,
     },
-    retryText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.primary.light },
-    listContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20 },
+    retryText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.primary.main },
+    list: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20 },
 });

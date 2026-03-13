@@ -6,20 +6,13 @@ import supabase from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-// ── Fila de información ──────────────────────────────────────────────────────
 function InfoRow({ icon, label, value }: { icon: any; label: string; value: string }) {
     return (
         <View style={rowStyles.row}>
             <View style={rowStyles.iconCol}>
-                <Ionicons name={icon} size={18} color={Colors.primary.light} />
+                <Ionicons name={icon} size={17} color={Colors.primary.main} />
             </View>
             <View style={rowStyles.textCol}>
                 <Text style={rowStyles.label}>{label}</Text>
@@ -29,34 +22,40 @@ function InfoRow({ icon, label, value }: { icon: any; label: string; value: stri
     );
 }
 
-// ── Fila de acción ───────────────────────────────────────────────────────────
 function ActionRow({ icon, label, onPress, danger = false }: {
     icon: any; label: string; onPress: () => void; danger?: boolean;
 }) {
     return (
-        <TouchableOpacity style={rowStyles.actionRow} onPress={onPress} activeOpacity={0.75}>
+        <TouchableOpacity style={rowStyles.actionRow} onPress={onPress} activeOpacity={0.7}>
             <View style={[rowStyles.actionIcon, danger && rowStyles.actionIconDanger]}>
-                <Ionicons name={icon} size={18} color={danger ? Colors.status.error : Colors.primary.light} />
+                <Ionicons
+                    name={icon}
+                    size={17}
+                    color={danger ? Colors.status.error : Colors.primary.main}
+                />
             </View>
-            <Text style={[rowStyles.actionLabel, danger && rowStyles.actionLabelDanger]}>{label}</Text>
-            <Ionicons name="chevron-forward" size={16} color={danger ? "rgba(220,38,38,0.5)" : "rgba(255,255,255,0.25)"} />
+            <Text style={[rowStyles.actionLabel, danger && rowStyles.actionLabelDanger]}>
+                {label}
+            </Text>
+            <Ionicons
+                name="chevron-forward"
+                size={15}
+                color={danger ? "#FECACA" : Colors.screen.border}
+            />
         </TouchableOpacity>
     );
 }
 
-// ── Pantalla ─────────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
     const { user, fullName, setUser } = useSession();
     const { logout } = useAuth();
-    const [departmentName, setDepartmentName] = useState<string>("");
+    const [departmentName, setDepartmentName] = useState("");
 
     useEffect(() => {
         if (user?.dep_id) {
             supabase
-                .from("departments")
-                .select("name")
-                .eq("id", user.dep_id)
-                .single()
+                .from("departments").select("name")
+                .eq("id", user.dep_id).single()
                 .then(({ data }) => { if (data?.name) setDepartmentName(data.name); });
         }
     }, [user?.dep_id]);
@@ -78,10 +77,10 @@ export default function ProfileScreen() {
     };
 
     return (
-        <ScreenShell blobBottomLeft>
-            <ScreenHeader title="Perfil" logoIcon="person" />
+        <ScreenShell theme="light">
+            <ScreenHeader theme="light" title="Perfil" logoIcon="person" />
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
                 {/* Avatar */}
                 <View style={styles.avatarSection}>
                     <View style={styles.avatarRing}>
@@ -93,7 +92,7 @@ export default function ProfileScreen() {
                     </View>
                     <Text style={styles.fullName}>{fullName}</Text>
                     <View style={styles.roleBadge}>
-                        <Ionicons name="shield-outline" size={12} color={Colors.primary.light} />
+                        <Ionicons name="shield-checkmark-outline" size={12} color={Colors.primary.main} />
                         <Text style={styles.roleText}>{roleLabel(user?.rol_id ?? 0)}</Text>
                     </View>
                 </View>
@@ -135,7 +134,12 @@ export default function ProfileScreen() {
                 {/* Logout */}
                 <View style={styles.section}>
                     <View style={styles.card}>
-                        <ActionRow icon="log-out-outline" label="Cerrar sesión" onPress={handleLogout} danger />
+                        <ActionRow
+                            icon="log-out-outline"
+                            label="Cerrar sesión"
+                            onPress={handleLogout}
+                            danger
+                        />
                     </View>
                 </View>
             </ScrollView>
@@ -144,58 +148,89 @@ export default function ProfileScreen() {
 }
 
 const rowStyles = StyleSheet.create({
-    row: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, paddingHorizontal: 16 },
+    row: {
+        flexDirection: "row", alignItems: "center",
+        gap: 12, paddingVertical: 14, paddingHorizontal: 16,
+    },
     iconCol: {
-        width: 36, height: 36, borderRadius: 10,
-        backgroundColor: "rgba(59,130,246,0.12)",
+        width: 34, height: 34, borderRadius: 10,
+        backgroundColor: Colors.screen.chipBlue,
         alignItems: "center", justifyContent: "center",
     },
     textCol: { flex: 1 },
-    label: { fontFamily: "Outfit_400Regular", fontSize: 11, color: "rgba(255,255,255,0.38)", letterSpacing: 0.5, marginBottom: 2 },
-    value: { fontFamily: "Outfit_500Medium", fontSize: 14, color: Colors.white },
-    actionRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, paddingHorizontal: 16 },
+    label: {
+        fontFamily: "Outfit_400Regular", fontSize: 11,
+        color: Colors.screen.textMuted, letterSpacing: 0.3, marginBottom: 2,
+    },
+    value: {
+        fontFamily: "Outfit_500Medium", fontSize: 14,
+        color: Colors.screen.textPrimary,
+    },
+    actionRow: {
+        flexDirection: "row", alignItems: "center",
+        gap: 12, paddingVertical: 14, paddingHorizontal: 16,
+    },
     actionIcon: {
-        width: 36, height: 36, borderRadius: 10,
-        backgroundColor: "rgba(59,130,246,0.12)",
+        width: 34, height: 34, borderRadius: 10,
+        backgroundColor: Colors.screen.chipBlue,
         alignItems: "center", justifyContent: "center",
     },
-    actionIconDanger: { backgroundColor: "rgba(220,38,38,0.12)" },
-    actionLabel: { flex: 1, fontFamily: "Outfit_500Medium", fontSize: 14, color: Colors.white },
+    actionIconDanger: { backgroundColor: "#FEF2F2" },
+    actionLabel: {
+        flex: 1, fontFamily: "Outfit_500Medium",
+        fontSize: 14, color: Colors.screen.textPrimary,
+    },
     actionLabelDanger: { color: Colors.status.error },
 });
 
 const styles = StyleSheet.create({
-    scrollContent: { paddingBottom: 32 },
-    avatarSection: { alignItems: "center", paddingVertical: 28, gap: 10 },
+    scroll: { paddingBottom: 32 },
+    avatarSection: {
+        alignItems: "center", paddingVertical: 28, gap: 10,
+        backgroundColor: Colors.screen.card,
+        borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
+    },
     avatarRing: {
-        width: 96, height: 96, borderRadius: 48,
-        backgroundColor: "rgba(59,130,246,0.14)",
-        borderWidth: 2, borderColor: "rgba(59,130,246,0.35)",
+        width: 88, height: 88, borderRadius: 44,
+        backgroundColor: Colors.screen.chipBlue,
+        borderWidth: 2, borderColor: Colors.screen.border,
         alignItems: "center", justifyContent: "center",
     },
     avatarInner: {
-        width: 76, height: 76, borderRadius: 38,
+        width: 70, height: 70, borderRadius: 35,
         backgroundColor: Colors.primary.main,
         alignItems: "center", justifyContent: "center",
     },
-    avatarInitials: { fontFamily: "Outfit_800ExtraBold", fontSize: 28, color: Colors.white, letterSpacing: 2 },
-    fullName: { fontFamily: "Outfit_700Bold", fontSize: 20, color: Colors.white },
+    avatarInitials: {
+        fontFamily: "Outfit_800ExtraBold",
+        fontSize: 26, color: Colors.white, letterSpacing: 2,
+    },
+    fullName: {
+        fontFamily: "Outfit_700Bold", fontSize: 20,
+        color: Colors.screen.textPrimary,
+    },
     roleBadge: {
         flexDirection: "row", alignItems: "center", gap: 5,
         paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20,
-        backgroundColor: "rgba(59,130,246,0.12)",
-        borderWidth: 1, borderColor: "rgba(59,130,246,0.28)",
+        backgroundColor: Colors.screen.chipBlue,
+        borderWidth: 1, borderColor: Colors.screen.border,
     },
-    roleText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.primary.light },
-    section: { paddingHorizontal: 16, marginBottom: 16 },
+    roleText: {
+        fontFamily: "Outfit_500Medium", fontSize: 12,
+        color: Colors.screen.chipBlueTxt,
+    },
+    section: { paddingHorizontal: 16, marginTop: 20 },
     sectionTitle: {
-        fontFamily: "Outfit_600SemiBold", fontSize: 12, color: "rgba(255,255,255,0.35)",
-        letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10, marginLeft: 4,
+        fontFamily: "Outfit_600SemiBold", fontSize: 11,
+        color: Colors.screen.textMuted, letterSpacing: 1.5,
+        textTransform: "uppercase", marginBottom: 8, marginLeft: 2,
     },
     card: {
-        backgroundColor: "rgba(255,255,255,0.06)",
-        borderRadius: 20, borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.09)", overflow: "hidden",
+        backgroundColor: Colors.screen.card,
+        borderRadius: 16, borderWidth: 1,
+        borderColor: Colors.screen.border, overflow: "hidden",
+        shadowColor: "#1E2D4A", shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
     },
-    divider: { height: 1, backgroundColor: "rgba(255,255,255,0.06)", marginHorizontal: 16 },
+    divider: { height: 1, backgroundColor: Colors.screen.border, marginHorizontal: 16 },
 });

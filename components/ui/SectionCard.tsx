@@ -1,58 +1,33 @@
-/**
- * SectionCard
- * -----------
- * Glass card reutilizable que envuelve secciones de formularios y contenido.
- * Incluye:
- *  - Efecto "glass" (fondo semi-transparente + borde sutil)
- *  - Línea shimmer opcional en la parte superior
- *  - Padding interno estándar configurable
- *
- * Uso:
- *   <SectionCard>
- *     <InputField ... />
- *     <PrimaryButton ... />
- *   </SectionCard>
- *
- *   <SectionCard shimmer={false} padding={16}>
- *     <InfoRow ... />
- *   </SectionCard>
- */
-
+import { Colors } from "@/constants/colors";
 import React from "react";
 import { StyleSheet, View, ViewStyle } from "react-native";
 
 interface SectionCardProps {
     children: React.ReactNode;
-    /** Muestra la línea shimmer en el top. Default: true */
+    theme?: "dark" | "light";
+    /** Línea shimmer en el top — solo relevante en dark. Default: true */
     shimmer?: boolean;
-    /** Padding interno horizontal y vertical. Default: 24 */
     padding?: number;
-    /** Padding-top interno (por si se necesita diferente al horizontal). Default: 28 */
     paddingTop?: number;
-    /** Estilo extra para el contenedor externo */
     style?: ViewStyle;
-    /** Estilo extra para el contenedor interno (después del shimmer) */
     contentStyle?: ViewStyle;
 }
 
 export default function SectionCard({
     children,
+    theme = "dark",
     shimmer = true,
-    padding = 24,
-    paddingTop = 28,
+    padding = 20,
+    paddingTop = 24,
     style,
     contentStyle,
 }: SectionCardProps) {
+    const isLight = theme === "light";
+
     return (
-        <View style={[styles.card, style]}>
-            {shimmer && <View style={styles.shimmer} />}
-            <View
-                style={[
-                    styles.content,
-                    { padding, paddingTop },
-                    contentStyle,
-                ]}
-            >
+        <View style={[isLight ? styles.cardLight : styles.cardDark, style]}>
+            {!isLight && shimmer && <View style={styles.shimmer} />}
+            <View style={[styles.content, { padding, paddingTop }, contentStyle]}>
                 {children}
             </View>
         </View>
@@ -60,8 +35,8 @@ export default function SectionCard({
 }
 
 const styles = StyleSheet.create({
-    card: {
-        borderRadius: 28,
+    cardDark: {
+        borderRadius: 24,
         overflow: "hidden",
         backgroundColor: "rgba(255,255,255,0.07)",
         borderWidth: 1,
@@ -71,6 +46,18 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.45,
         shadowRadius: 32,
         elevation: 20,
+    },
+    cardLight: {
+        borderRadius: 16,
+        overflow: "hidden",
+        backgroundColor: Colors.screen.card,
+        borderWidth: 1,
+        borderColor: Colors.screen.border,
+        shadowColor: "#1E2D4A",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
     },
     shimmer: {
         height: 1,

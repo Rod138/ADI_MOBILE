@@ -1,25 +1,3 @@
-/**
- * FormPageHeader
- * --------------
- * Cabecera estética para pantallas de formulario secundario.
- * Renderiza:
- *  - Anillo exterior con ícono central
- *  - Título grande
- *  - Subtítulo / texto descriptivo opcional
- *
- * Uso:
- *   <FormPageHeader
- *     icon="key-outline"
- *     title="Cambiar contraseña"
- *   />
- *
- *   <FormPageHeader
- *     icon="phone-portrait-outline"
- *     title="Cambiar teléfono"
- *     subtitle="Actual: 5512345678"
- *   />
- */
-
 import { Colors } from "@/constants/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
@@ -28,60 +6,61 @@ interface FormPageHeaderProps {
     icon: keyof typeof Ionicons.glyphMap;
     title: string;
     subtitle?: string;
+    theme?: "dark" | "light";
 }
 
-export default function FormPageHeader({ icon, title, subtitle }: FormPageHeaderProps) {
+export default function FormPageHeader({
+    icon,
+    title,
+    subtitle,
+    theme = "dark",
+}: FormPageHeaderProps) {
+    const isLight = theme === "light";
+
     return (
         <View style={styles.container}>
-            {/* Anillo con ícono */}
-            <View style={styles.iconRing}>
-                <View style={styles.iconInner}>
-                    <Ionicons name={icon} size={28} color={Colors.primary.light} />
+            <View style={[styles.iconRing, isLight ? styles.iconRingLight : styles.iconRingDark]}>
+                <View style={[styles.iconInner, isLight ? styles.iconInnerLight : styles.iconInnerDark]}>
+                    <Ionicons name={icon} size={26} color={Colors.primary.light} />
                 </View>
             </View>
-
-            {/* Título */}
-            <Text style={styles.title}>{title}</Text>
-
-            {/* Subtítulo opcional */}
-            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+            <Text style={[styles.title, isLight ? styles.titleLight : styles.titleDark]}>
+                {title}
+            </Text>
+            {subtitle ? (
+                <Text style={[styles.subtitle, isLight ? styles.subtitleLight : styles.subtitleDark]}>
+                    {subtitle}
+                </Text>
+            ) : null}
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        alignItems: "center",
-        gap: 14,
-    },
+    container: { alignItems: "center", gap: 12 },
     iconRing: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: "rgba(59,130,246,0.12)",
+        width: 72, height: 72, borderRadius: 36,
         borderWidth: 1.5,
+        alignItems: "center", justifyContent: "center",
+    },
+    iconRingDark: {
+        backgroundColor: "rgba(59,130,246,0.12)",
         borderColor: "rgba(59,130,246,0.28)",
-        alignItems: "center",
-        justifyContent: "center",
+    },
+    iconRingLight: {
+        backgroundColor: Colors.screen.chipBlue,
+        borderColor: Colors.screen.border,
     },
     iconInner: {
-        width: 58,
-        height: 58,
-        borderRadius: 29,
-        backgroundColor: "rgba(255,255,255,0.06)",
-        alignItems: "center",
-        justifyContent: "center",
+        width: 52, height: 52, borderRadius: 26,
+        alignItems: "center", justifyContent: "center",
     },
-    title: {
-        fontFamily: "Outfit_800ExtraBold",
-        fontSize: 28,
-        color: "#FFFFFF",
-        letterSpacing: 0.2,
-        textAlign: "center",
-    },
-    subtitle: {
-        fontFamily: "Outfit_400Regular",
-        fontSize: 13,
-        color: "rgba(255,255,255,0.38)",
-    },
+    iconInnerDark: { backgroundColor: "rgba(255,255,255,0.06)" },
+    iconInnerLight: { backgroundColor: Colors.screen.card },
+    title: { fontFamily: "Outfit_700Bold", fontSize: 22, textAlign: "center" },
+    titleDark: { color: "#FFFFFF" },
+    titleLight: { color: Colors.screen.textPrimary },
+    subtitle: { fontFamily: "Outfit_400Regular", fontSize: 13 },
+    subtitleDark: { color: "rgba(255,255,255,0.38)" },
+    subtitleLight: { color: Colors.screen.textSecondary },
 });
