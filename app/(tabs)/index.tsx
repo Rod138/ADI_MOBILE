@@ -1,11 +1,13 @@
+import IncidentCard, { getStatusStyle } from "@/components/IncidentCard";
 import { ScreenHeader } from "@/components/ui";
 import { Colors } from "@/constants/colors";
-import { useCatalogs, useIncidents, type Incident } from "@/hooks/useIncidents";
+import { useSession } from "@/context/AuthContext";
+import { useCatalogs, useIncidents } from "@/hooks/useIncidents";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator, Animated, Dimensions, FlatList, Image,
+    ActivityIndicator, Animated, Dimensions, FlatList,
     Platform, Pressable, ScrollView, StatusBar, StyleSheet,
     Text, TouchableOpacity, View,
 } from "react-native";
@@ -14,95 +16,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.72;
 
-function formatDateTime(iso: string) {
-    const d = new Date(iso);
-    return {
-        date: d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }),
-        time: d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: true }),
-    };
-}
-
-function getStatusStyle(name: string) {
-    const n = name?.toLowerCase() ?? "";
-    if (n.includes("resuel") || n.includes("complet"))
-        return { color: "#059669", bg: "#ECFDF5", border: "#A7F3D0", icon: "checkmark-circle-outline" as const };
-    if (n.includes("pend"))
-        return { color: "#D97706", bg: "#FFFBEB", border: "#FDE68A", icon: "time-outline" as const };
-    if (n.includes("cerr"))
-        return { color: "#6B7280", bg: "#F3F4F6", border: "#E5E7EB", icon: "lock-closed-outline" as const };
-    return { color: Colors.primary.main, bg: Colors.screen.chipBlue, border: Colors.screen.border, icon: "ellipse-outline" as const };
-}
-
-function IncidentCard({ item }: { item: Incident }) {
-    const reportedBy = item.users
-        ? `${item.users.name} ${item.users.ap}${item.users.am ? " " + item.users.am : ""}`.trim()
-        : "—";
-    const statusName = item.inc_status?.name ?? "—";
-    const ss = getStatusStyle(statusName);
-    const { date, time } = formatDateTime(item.created_at);
-
-    return (
-        <View style={cardStyles.card}>
-            <View style={[cardStyles.statusBar, { backgroundColor: ss.color }]} />
-            <View style={cardStyles.inner}>
-                {/* Fila superior */}
-                <View style={cardStyles.topRow}>
-                    <View style={cardStyles.avatar}>
-                        <Text style={cardStyles.avatarText}>
-                            {reportedBy.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
-                        </Text>
-                    </View>
-                    <View style={cardStyles.reporterInfo}>
-                        <Text style={cardStyles.reportedBy} numberOfLines={1}>{reportedBy}</Text>
-                        <View style={cardStyles.dateRow}>
-                            <Ionicons name="calendar-outline" size={11} color={Colors.screen.textMuted} />
-                            <Text style={cardStyles.dateText}>{date}</Text>
-                            <View style={cardStyles.dot} />
-                            <Ionicons name="time-outline" size={11} color={Colors.screen.textMuted} />
-                            <Text style={cardStyles.dateText}>{time}</Text>
-                        </View>
-                    </View>
-                    <View style={[cardStyles.statusBadge, { backgroundColor: ss.bg, borderColor: ss.border }]}>
-                        <Ionicons name={ss.icon} size={12} color={ss.color} />
-                        <Text style={[cardStyles.statusText, { color: ss.color }]}>{statusName}</Text>
-                    </View>
-                </View>
-
-                <View style={cardStyles.divider} />
-
-                {/* Chips */}
-                <View style={cardStyles.chips}>
-                    <View style={cardStyles.chipBlue}>
-                        <Ionicons name="grid-outline" size={11} color={Colors.screen.chipBlueTxt} />
-                        <Text style={[cardStyles.chipText, { color: Colors.screen.chipBlueTxt }]}>
-                            {item.areas?.name ?? "—"}
-                        </Text>
-                    </View>
-                    <View style={cardStyles.chipPurple}>
-                        <Ionicons name="alert-circle-outline" size={11} color={Colors.screen.chipPurpleTxt} />
-                        <Text style={[cardStyles.chipText, { color: Colors.screen.chipPurpleTxt }]}>
-                            {item.inc_types?.name ?? "—"}
-                        </Text>
-                    </View>
-                </View>
-
-                <Text style={cardStyles.description} numberOfLines={3}>{item.description}</Text>
-
-                {item.image ? (
-                    <Image source={{ uri: item.image }} style={cardStyles.image} resizeMode="cover" />
-                ) : null}
-
-                <View style={cardStyles.footer}>
-                    <Ionicons name="cash-outline" size={12} color={Colors.screen.textMuted} />
-                    <Text style={cardStyles.costLabel}>Costo:</Text>
-                    <Text style={cardStyles.costValue}>${item.cost ?? 0}</Text>
-                </View>
-            </View>
-        </View>
-    );
-}
-
 export default function IncidentsScreen() {
+    const { user } = useSession();
     const { areas, statuses, catalogsLoading } = useCatalogs();
     const { incidents, isLoading, error, fetchIncidents } = useIncidents();
 
@@ -227,7 +142,13 @@ export default function IncidentsScreen() {
                     <FlatList
                         data={incidents}
                         keyExtractor={(i) => String(i.id)}
-                        renderItem={({ item }) => <IncidentCard item={item} />}
+                        renderItem={({ item }) => (
+                            <IncidentCard
+                                item={item}
+                                currentUserId={user?.id}
+                                onEdit={(inc) => router.push({ pathname: "/(tabs)/edit-incident", params: { id: inc.id } } as any)}
+                            />
+                        )}
                         contentContainerStyle={styles.list}
                         showsVerticalScrollIndicator={false}
                         onRefresh={() => fetchIncidents(activeStatusId, activeAreaId)}
@@ -275,61 +196,6 @@ export default function IncidentsScreen() {
         </View>
     );
 }
-
-const cardStyles = StyleSheet.create({
-    card: {
-        flexDirection: "row", backgroundColor: Colors.screen.card,
-        borderRadius: 16, borderWidth: 1, borderColor: Colors.screen.border,
-        marginBottom: 10, overflow: "hidden",
-        shadowColor: "#1E2D4A", shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
-    },
-    statusBar: { width: 4 },
-    inner: { flex: 1, padding: 14 },
-    topRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
-    avatar: {
-        width: 36, height: 36, borderRadius: 18,
-        backgroundColor: Colors.screen.chipBlue, borderWidth: 1, borderColor: Colors.screen.border,
-        alignItems: "center", justifyContent: "center", flexShrink: 0,
-    },
-    avatarText: { fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.screen.chipBlueTxt },
-    reporterInfo: { flex: 1, gap: 3 },
-    reportedBy: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textPrimary },
-    dateRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-    dateText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
-    dot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: Colors.screen.border },
-    statusBadge: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        borderWidth: 1, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4, flexShrink: 0,
-    },
-    statusText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
-    divider: { height: 1, backgroundColor: Colors.screen.border, marginBottom: 10 },
-    chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 },
-    chipBlue: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        backgroundColor: Colors.screen.chipBlue, borderRadius: 8,
-        paddingHorizontal: 8, paddingVertical: 4,
-        borderWidth: 1, borderColor: Colors.screen.border,
-    },
-    chipPurple: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        backgroundColor: Colors.screen.chipPurple, borderRadius: 8,
-        paddingHorizontal: 8, paddingVertical: 4,
-        borderWidth: 1, borderColor: "#DDD6FE",
-    },
-    chipText: { fontFamily: "Outfit_500Medium", fontSize: 11 },
-    description: {
-        fontFamily: "Outfit_400Regular", fontSize: 13,
-        color: Colors.screen.textSecondary, lineHeight: 20, marginBottom: 10,
-    },
-    image: { width: "100%", height: 160, borderRadius: 12, marginBottom: 10 },
-    footer: {
-        flexDirection: "row", alignItems: "center", gap: 5,
-        borderTopWidth: 1, borderTopColor: Colors.screen.border, paddingTop: 8,
-    },
-    costLabel: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted, flex: 1 },
-    costValue: { fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.screen.textSecondary },
-});
 
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },

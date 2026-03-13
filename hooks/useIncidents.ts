@@ -24,7 +24,7 @@ export interface Incident {
     image: string | null;
     usr_id: number;
     area_id: number;
-    solved_at: string | null;
+    completed_at: string | null;  // antes: solved_at
     notes: string | null;
     cost: number | null;
     closed_at: string | null;
@@ -45,6 +45,13 @@ export interface CreateIncidentPayload {
     status_id: number;
     type_id: number;
     cost: number;
+}
+
+export interface UpdateIncidentPayload {
+    description: string;
+    image: string | null;
+    area_id: number;
+    type_id: number;
 }
 
 // ─────────────────────────────────────────────
@@ -78,7 +85,7 @@ export function useCatalogs() {
 }
 
 // ─────────────────────────────────────────────
-// Hook — Incidencias (lista + crear)
+// Hook — Incidencias (lista + crear + editar)
 // ─────────────────────────────────────────────
 export function useIncidents() {
     const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -147,5 +154,41 @@ export function useIncidents() {
         }
     };
 
-    return { incidents, isLoading, error, fetchIncidents, createIncident };
+    const updateIncident = async (
+        id: number,
+        payload: UpdateIncidentPayload
+    ): Promise<boolean> => {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const { error: dbError } = await supabase
+                .from("incidents")
+                .update(payload)
+                .eq("id", id);
+
+            if (dbError) {
+                console.error("Error Supabase update:", dbError.message, dbError.details, dbError.hint);
+                setError(dbError.message);
+                return false;
+            }
+
+            // Refleja los cambios en el estado local sin refetch
+            setIncidents((prev) =>
+                prev.map((inc) =>
+                    inc.id === id ? { ...inc, ...payload } : inc
+                )
+            );
+
+            return true;
+        } catch (e: any) {
+            console.error("Error inesperado:", e?.message);
+            setError("No se pudo conectar al servidor.");
+            return false;
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return { incidents, isLoading, error, fetchIncidents, createIncident, updateIncident };
 }

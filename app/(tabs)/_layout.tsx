@@ -66,6 +66,10 @@ export default function TabsLayout() {
                     name="change-phone"
                     options={{ href: null }}
                 />
+                <Tabs.Screen
+                    name="edit-incident"
+                    options={{ href: null }}
+                />
             </Tabs>
         </AuthProvider>
     );
