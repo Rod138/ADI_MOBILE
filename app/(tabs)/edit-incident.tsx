@@ -256,7 +256,7 @@ export default function EditIncidentScreen() {
                 theme="light"
                 icon="pencil-outline"
                 title="Editar incidencia"
-                subtitle={`#${incidentId} · ${original.created_at.slice(0, 10)}`}
+                subtitle={`${original.created_at.slice(0, 10)}`}
             />
 
             <SectionCard theme="light">

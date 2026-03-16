@@ -65,7 +65,7 @@ export default function LoginScreen() {
 
     return (
         <View style={styles.root}>
-            <StatusBar barStyle="light-content" backgroundColor="#0C1F5C" />
+            <StatusBar barStyle="light-content" backgroundColor="#1C1C1C" />
 
             {/* Blobs decorativos */}
             <View style={styles.blobTR} />
@@ -164,7 +164,7 @@ export default function LoginScreen() {
                                         onPress={handleLogin}
                                         isLoading={isLoading}
                                         disabled={isLoading}
-                                        variant="light"
+                                        variant="orange"
                                     />
                                 </View>
                             </View>
@@ -186,24 +186,24 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
     root: {
         flex: 1,
-        backgroundColor: "#0C1F5C",
+        backgroundColor: "#1C1C1C",
     },
 
-    // Blobs
+    // Blobs — verde lima y naranja en lugar de azul/púrpura
     blobTR: {
         position: "absolute", top: -60, right: -70,
         width: 260, height: 260, borderRadius: 130,
-        backgroundColor: "rgba(59,130,246,0.15)",
+        backgroundColor: "rgba(132,204,22,0.15)",
     },
     blobBL: {
         position: "absolute", bottom: 80, left: -80,
         width: 200, height: 200, borderRadius: 100,
-        backgroundColor: "rgba(109,40,217,0.12)",
+        backgroundColor: "rgba(249,115,22,0.12)",
     },
     blobC: {
         position: "absolute", top: "40%", right: -40,
         width: 140, height: 140, borderRadius: 70,
-        backgroundColor: "rgba(30,58,138,0.28)",
+        backgroundColor: "rgba(45,45,45,0.60)",
     },
     accentLine: {
         position: "absolute", right: 48,
@@ -247,7 +247,6 @@ const styles = StyleSheet.create({
     formSection: { gap: 20 },
     formHeader: { gap: 2 },
 
-    // Card internal padding/effects specific to login specific styling
     cardShimmer: {
         height: 1,
         backgroundColor: "rgba(255,255,255,0.15)",
@@ -267,7 +266,7 @@ const styles = StyleSheet.create({
     forgotText: {
         fontFamily: "Outfit_600SemiBold",
         fontSize: 12,
-        color: "#93C5FD",
+        color: "#BEF264",
     },
 
     // Footer

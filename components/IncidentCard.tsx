@@ -21,14 +21,13 @@ export function getStatusStyle(name: string) {
         return { color: "#D97706", bg: "#FFFBEB", border: "#FDE68A", icon: "time-outline" as const };
     if (n.includes("cerr"))
         return { color: "#6B7280", bg: "#F3F4F6", border: "#E5E7EB", icon: "lock-closed-outline" as const };
-    return { color: Colors.primary.main, bg: Colors.screen.chipBlue, border: Colors.screen.border, icon: "ellipse-outline" as const };
+    return { color: Colors.primary.main, bg: Colors.primary.soft, border: Colors.screen.border, icon: "ellipse-outline" as const };
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface IncidentCardProps {
     item: Incident;
-    /** ID del usuario en sesión — muestra botón Editar si coincide con el creador */
     currentUserId?: number;
     onEdit?: (item: Incident) => void;
 }
@@ -44,11 +43,9 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
     const { date, time } = formatDateTime(item.created_at);
     const isOwner = currentUserId !== undefined && item.usr_id === currentUserId;
 
-    // Botón Editar solo visible durante las primeras 24h desde la creación
     const withinEditWindow = Date.now() - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000;
     const showEditBtn = isOwner && onEdit && withinEditWindow;
 
-    // Badge "Editada" con fecha y hora
     const editedLabel = item.edited_at ? (() => {
         const { date: ed, time: et } = formatDateTime(item.edited_at);
         return `Editada · ${ed} ${et}`;
@@ -56,9 +53,10 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
 
     return (
         <View style={styles.card}>
+            {/* Barra lateral de color de estado */}
             <View style={[styles.statusBar, { backgroundColor: ss.color }]} />
-            <View style={styles.inner}>
 
+            <View style={styles.inner}>
                 {/* Fila superior */}
                 <View style={styles.topRow}>
                     <View style={styles.avatar}>
@@ -68,42 +66,32 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
                     </View>
                     <View style={styles.reporterInfo}>
                         <Text style={styles.reportedBy} numberOfLines={1}>{reportedBy}</Text>
-                        <View style={styles.dateRow}>
-                            <Ionicons name="calendar-outline" size={11} color={Colors.screen.textMuted} />
-                            <Text style={styles.dateText}>{date}</Text>
-                            <View style={styles.dot} />
-                            <Ionicons name="time-outline" size={11} color={Colors.screen.textMuted} />
-                            <Text style={styles.dateText}>{time}</Text>
+                        <View style={styles.metaRow}>
+                            <Text style={styles.metaText}>{date}</Text>
+                            <Text style={styles.metaDot}>·</Text>
+                            <Text style={styles.metaText}>{time}</Text>
                         </View>
                         {editedLabel && (
-                            <View style={styles.editedBadge}>
-                                <Ionicons name="create-outline" size={11} color="#7C6FAE" />
-                                <Text style={styles.editedText}>{editedLabel}</Text>
-                            </View>
+                            <Text style={styles.editedText}>{editedLabel}</Text>
                         )}
                     </View>
+                    {/* Badge de estado — único acento de color en la card */}
                     <View style={[styles.statusBadge, { backgroundColor: ss.bg, borderColor: ss.border }]}>
-                        <Ionicons name={ss.icon} size={12} color={ss.color} />
                         <Text style={[styles.statusText, { color: ss.color }]}>{statusName}</Text>
                     </View>
                 </View>
 
                 <View style={styles.divider} />
 
-                {/* Chips */}
-                <View style={styles.chips}>
-                    <View style={styles.chipBlue}>
-                        <Ionicons name="grid-outline" size={11} color={Colors.screen.chipBlueTxt} />
-                        <Text style={[styles.chipText, { color: Colors.screen.chipBlueTxt }]}>
-                            {item.areas?.name ?? "—"}
-                        </Text>
-                    </View>
-                    <View style={styles.chipPurple}>
-                        <Ionicons name="alert-circle-outline" size={11} color={Colors.screen.chipPurpleTxt} />
-                        <Text style={[styles.chipText, { color: Colors.screen.chipPurpleTxt }]}>
-                            {item.inc_types?.name ?? "—"}
-                        </Text>
-                    </View>
+                {/* Área y tipo — solo texto, sin chips de color */}
+                <View style={styles.tagsRow}>
+                    <Text style={styles.tagText}>
+                        {item.areas?.name ?? "—"}
+                    </Text>
+                    <Text style={styles.tagSep}>·</Text>
+                    <Text style={styles.tagText}>
+                        {item.inc_types?.name ?? "—"}
+                    </Text>
                 </View>
 
                 {/* Descripción */}
@@ -114,11 +102,9 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
                     <Image source={{ uri: item.image }} style={styles.image} resizeMode="cover" />
                 ) : null}
 
-                {/* Footer: costo + botón editar */}
+                {/* Footer */}
                 <View style={styles.footer}>
-                    <Ionicons name="cash-outline" size={12} color={Colors.screen.textMuted} />
-                    <Text style={styles.costLabel}>Costo:</Text>
-                    <Text style={styles.costValue}>${item.cost ?? 0}</Text>
+                    <Text style={styles.costText}>${item.cost ?? 0}</Text>
 
                     {showEditBtn && (
                         <TouchableOpacity
@@ -126,12 +112,11 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
                             onPress={() => onEdit!(item)}
                             activeOpacity={0.75}
                         >
-                            <Ionicons name="pencil-outline" size={13} color={Colors.primary.main} />
+                            <Ionicons name="pencil-outline" size={13} color={Colors.screen.textSecondary} />
                             <Text style={styles.editBtnText}>Editar</Text>
                         </TouchableOpacity>
                     )}
                 </View>
-
             </View>
         </View>
     );
@@ -141,68 +126,131 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
 
 const styles = StyleSheet.create({
     card: {
-        flexDirection: "row", backgroundColor: Colors.screen.card,
-        borderRadius: 16, borderWidth: 1, borderColor: Colors.screen.border,
-        marginBottom: 10, overflow: "hidden",
-        shadowColor: "#1E2D4A", shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+        flexDirection: "row",
+        backgroundColor: Colors.screen.card,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: Colors.screen.border,
+        marginBottom: 10,
+        overflow: "hidden",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
+        elevation: 1,
     },
-    statusBar: { width: 4 },
+    statusBar: { width: 3 },
     inner: { flex: 1, padding: 14 },
+
+    // Fila superior
     topRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
     avatar: {
-        width: 36, height: 36, borderRadius: 18,
-        backgroundColor: Colors.screen.chipBlue, borderWidth: 1, borderColor: Colors.screen.border,
+        width: 34, height: 34, borderRadius: 17,
+        backgroundColor: Colors.screen.bg,
+        borderWidth: 1, borderColor: Colors.screen.border,
         alignItems: "center", justifyContent: "center", flexShrink: 0,
     },
-    avatarText: { fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.screen.chipBlueTxt },
-    reporterInfo: { flex: 1, gap: 3 },
-    reportedBy: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textPrimary },
-    dateRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-    dateText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
-    dot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: Colors.screen.border },
+    avatarText: {
+        fontFamily: "Outfit_600SemiBold",
+        fontSize: 12,
+        color: Colors.screen.textSecondary,
+    },
+    reporterInfo: { flex: 1, gap: 2 },
+    reportedBy: {
+        fontFamily: "Outfit_600SemiBold",
+        fontSize: 14,
+        color: Colors.screen.textPrimary,
+    },
+    metaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+    metaText: {
+        fontFamily: "Outfit_400Regular",
+        fontSize: 11,
+        color: Colors.screen.textMuted,
+    },
+    metaDot: {
+        fontSize: 11,
+        color: Colors.screen.border,
+    },
+    editedText: {
+        fontFamily: "Outfit_400Regular",
+        fontSize: 10,
+        color: Colors.screen.textMuted,
+        marginTop: 1,
+    },
+
+    // Badge estado — único elemento con color
     statusBadge: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        borderWidth: 1, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4, flexShrink: 0,
+        borderWidth: 1,
+        borderRadius: 20,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        flexShrink: 0,
     },
-    statusText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
-    divider: { height: 1, backgroundColor: Colors.screen.border, marginBottom: 10 },
-    chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 },
-    chipBlue: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        backgroundColor: Colors.screen.chipBlue, borderRadius: 8,
-        paddingHorizontal: 8, paddingVertical: 4,
-        borderWidth: 1, borderColor: Colors.screen.border,
+    statusText: {
+        fontFamily: "Outfit_600SemiBold",
+        fontSize: 11,
     },
-    chipPurple: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        backgroundColor: Colors.screen.chipPurple, borderRadius: 8,
-        paddingHorizontal: 8, paddingVertical: 4,
-        borderWidth: 1, borderColor: "#DDD6FE",
+
+    divider: {
+        height: 1,
+        backgroundColor: Colors.screen.border,
+        marginBottom: 10,
     },
-    chipText: { fontFamily: "Outfit_500Medium", fontSize: 11 },
+
+    // Tags de área/tipo — texto plano, sin chips
+    tagsRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        marginBottom: 8,
+    },
+    tagText: {
+        fontFamily: "Outfit_500Medium",
+        fontSize: 12,
+        color: Colors.screen.textSecondary,
+    },
+    tagSep: {
+        fontSize: 12,
+        color: Colors.screen.border,
+    },
+
     description: {
-        fontFamily: "Outfit_400Regular", fontSize: 13,
-        color: Colors.screen.textSecondary, lineHeight: 20, marginBottom: 10,
+        fontFamily: "Outfit_400Regular",
+        fontSize: 13,
+        color: Colors.screen.textSecondary,
+        lineHeight: 20,
+        marginBottom: 10,
     },
-    image: { width: "100%", height: 160, borderRadius: 12, marginBottom: 10 },
+    image: { width: "100%", height: 160, borderRadius: 10, marginBottom: 10 },
+
+    // Footer
     footer: {
-        flexDirection: "row", alignItems: "center", gap: 5,
-        borderTopWidth: 1, borderTopColor: Colors.screen.border, paddingTop: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        borderTopWidth: 1,
+        borderTopColor: Colors.screen.border,
+        paddingTop: 8,
     },
-    costLabel: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted },
-    costValue: { fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.screen.textSecondary, flex: 1 },
-    editedBadge: {
-        flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 3,
-        paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8,
-        backgroundColor: "#F5F3FF", borderWidth: 1, borderColor: "#DDD6FE", marginTop: 2,
+    costText: {
+        fontFamily: "Outfit_500Medium",
+        fontSize: 12,
+        color: Colors.screen.textMuted,
+        flex: 1,
     },
-    editedText: { fontFamily: "Outfit_400Regular", fontSize: 10, color: "#7C6FAE" },
     editBtn: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
-        backgroundColor: Colors.screen.chipBlue,
-        borderWidth: 1, borderColor: Colors.screen.border,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 8,
+        backgroundColor: Colors.screen.bg,
+        borderWidth: 1,
+        borderColor: Colors.screen.border,
     },
-    editBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.main },
+    editBtnText: {
+        fontFamily: "Outfit_500Medium",
+        fontSize: 12,
+        color: Colors.screen.textSecondary,
+    },
 });

@@ -23,7 +23,7 @@ export const globalStyles = StyleSheet.create({
         textAlign: "center",
     },
 
-    // UI Elements
+    // UI Elements — glass card sobre fondo grafito
     glassCard: {
         borderRadius: 28,
         overflow: "hidden",

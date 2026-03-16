@@ -16,7 +16,7 @@ interface ScreenShellProps {
     theme?: "dark" | "light";
     /** Activa ScrollView interno con padding estándar */
     scroll?: boolean;
-    /** Solo aplica en theme="dark": muestra blob bottom-left púrpura */
+    /** Solo aplica en theme="dark": muestra blob bottom-left naranja */
     blobBottomLeft?: boolean;
     scrollPaddingH?: number;
     scrollContentStyle?: ViewStyle;
@@ -33,7 +33,7 @@ export default function ScreenShell({
     style,
 }: ScreenShellProps) {
     const isDark = theme === "dark";
-    const bgColor = isDark ? "#0C1F5C" : Colors.screen.bg;
+    const bgColor = isDark ? "#1C1C1C" : Colors.screen.bg;
 
     const inner = scroll ? (
         <ScrollView
@@ -55,10 +55,10 @@ export default function ScreenShell({
         <View style={[styles.root, { backgroundColor: bgColor }, style]}>
             <StatusBar
                 barStyle="light-content"
-                backgroundColor="#0C1F5C"
+                backgroundColor="#1C1C1C"
             />
 
-            {/* Blobs — solo en modo dark */}
+            {/* Blobs — solo en modo dark, verde lima */}
             {isDark && <View style={styles.blobTR} />}
             {isDark && blobBottomLeft && <View style={styles.blobBL} />}
 
@@ -91,12 +91,12 @@ const styles = StyleSheet.create({
         position: "absolute",
         top: -60, right: -70,
         width: 220, height: 220, borderRadius: 110,
-        backgroundColor: "rgba(59,130,246,0.12)",
+        backgroundColor: "rgba(132,204,22,0.12)",
     },
     blobBL: {
         position: "absolute",
         bottom: 80, left: -60,
         width: 160, height: 160, borderRadius: 80,
-        backgroundColor: "rgba(109,40,217,0.10)",
+        backgroundColor: "rgba(249,115,22,0.10)",
     },
 });

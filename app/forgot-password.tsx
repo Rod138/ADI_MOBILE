@@ -50,11 +50,9 @@ export default function ForgotPasswordScreen() {
         if (success) setStep("success");
     };
 
-    // Esta pantalla tiene blobs decorativos adicionales (blobC + accentLines)
-    // que no están en ScreenShell, así que mantenemos un root manual
     return (
         <View style={styles.root}>
-            <StatusBar barStyle="light-content" backgroundColor="#0C1F5C" />
+            <StatusBar barStyle="light-content" backgroundColor="#1C1C1C" />
             <View style={styles.blobTR} />
             <View style={styles.blobBL} />
             <View style={styles.blobC} />
@@ -120,7 +118,7 @@ export default function ForgotPasswordScreen() {
                                             onPress={handleSubmit}
                                             isLoading={isLoading}
                                             disabled={isLoading}
-                                            variant="light"
+                                            variant="orange"
                                         />
                                     </>
                                 )}
@@ -174,31 +172,42 @@ function SuccessContent({ email, onResend, isLoading }: { email: string; onResen
 }
 
 const styles = StyleSheet.create({
-    root: { flex: 1, backgroundColor: "#0C1F5C" },
-    blobTR: { position: "absolute", top: -60, right: -70, width: 260, height: 260, borderRadius: 130, backgroundColor: "rgba(59,130,246,0.15)" },
-    blobBL: { position: "absolute", bottom: 80, left: -80, width: 200, height: 200, borderRadius: 100, backgroundColor: "rgba(109,40,217,0.12)" },
-    blobC: { position: "absolute", top: "40%", right: -40, width: 140, height: 140, borderRadius: 70, backgroundColor: "rgba(30,58,138,0.28)" },
+    root: { flex: 1, backgroundColor: "#1C1C1C" },
+
+    // Blobs — verde lima y naranja
+    blobTR: { position: "absolute", top: -60, right: -70, width: 260, height: 260, borderRadius: 130, backgroundColor: "rgba(132,204,22,0.15)" },
+    blobBL: { position: "absolute", bottom: 80, left: -80, width: 200, height: 200, borderRadius: 100, backgroundColor: "rgba(249,115,22,0.12)" },
+    blobC: { position: "absolute", top: "40%", right: -40, width: 140, height: 140, borderRadius: 70, backgroundColor: "rgba(45,45,45,0.60)" },
     accentLine: { position: "absolute", width: 1.5, backgroundColor: "rgba(255,255,255,0.07)", transform: [{ rotate: "30deg" }] },
+
     scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 32, paddingBottom: 48, gap: 40 },
     headerSection: { alignItems: "center", gap: 12 },
-    iconRing: { width: 88, height: 88, borderRadius: 44, backgroundColor: "rgba(59,130,246,0.12)", borderWidth: 1.5, borderColor: "rgba(59,130,246,0.28)", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+
+    // Icon ring — verde lima
+    iconRing: { width: 88, height: 88, borderRadius: 44, backgroundColor: "rgba(132,204,22,0.12)", borderWidth: 1.5, borderColor: "rgba(132,204,22,0.28)", alignItems: "center", justifyContent: "center", marginBottom: 4 },
     iconInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: "rgba(255,255,255,0.06)", alignItems: "center", justifyContent: "center" },
-    title: { fontFamily: "Outfit_800ExtraBold", fontSize: 28, color: Colors.white, letterSpacing: 0.2, textAlign: "center" },
+
+    title: { fontFamily: "Outfit_800ExtraBold", fontSize: 28, color: "#FFFFFF", letterSpacing: 0.2, textAlign: "center" },
     taglineRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
     taglineLine: { height: 1, width: 28, backgroundColor: "rgba(255,255,255,0.18)" },
     taglineText: { fontFamily: "Outfit_500Medium", fontSize: 11, color: "rgba(255,255,255,0.38)", letterSpacing: 2.5 },
+
     formSection: { gap: 20 },
     instructionText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: "rgba(255,255,255,0.60)", lineHeight: 22, marginBottom: 24 },
+
     successContainer: { alignItems: "center", paddingVertical: 8, gap: 16 },
-    checkCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(5,150,105,0.14)", borderWidth: 1.5, borderColor: "rgba(5,150,105,0.35)", alignItems: "center", justifyContent: "center", marginBottom: 4 },
-    successTitle: { fontFamily: "Outfit_800ExtraBold", fontSize: 22, color: Colors.white, letterSpacing: 0.3 },
+    checkCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(22,163,74,0.14)", borderWidth: 1.5, borderColor: "rgba(22,163,74,0.35)", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+    successTitle: { fontFamily: "Outfit_800ExtraBold", fontSize: 22, color: "#FFFFFF", letterSpacing: 0.3 },
     successBody: { fontFamily: "Outfit_400Regular", fontSize: 14, color: "rgba(255,255,255,0.60)", lineHeight: 22, textAlign: "center" },
-    successEmail: { fontFamily: "Outfit_600SemiBold", color: "#93C5FD" },
+    successEmail: { fontFamily: "Outfit_600SemiBold", color: "#BEF264" },
+
     resendRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
     resendLabel: { fontFamily: "Outfit_400Regular", fontSize: 13, color: "rgba(255,255,255,0.45)" },
-    resendLink: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: "#93C5FD", textDecorationLine: "underline" },
-    returnBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: "rgba(59,130,246,0.08)", marginTop: 4 },
+    resendLink: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: "#BEF264", textDecorationLine: "underline" },
+
+    returnBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: "rgba(132,204,22,0.08)", marginTop: 4 },
     returnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.primary.light },
+
     footer: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 20 },
     footerDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.18)" },
     footerText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: "#aaaaaa", letterSpacing: 0.5 },

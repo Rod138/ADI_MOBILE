@@ -10,15 +10,15 @@ export default function TabsLayout() {
                 screenOptions={{
                     headerShown: false,
                     tabBarStyle: {
-                        backgroundColor: Colors.screen.bg,        // #EEF2F7
-                        borderTopColor: Colors.screen.border,      // #D1D9E6
+                        backgroundColor: Colors.screen.bg,        // #F8F8F8
+                        borderTopColor: Colors.screen.border,      // #E5E7EB
                         borderTopWidth: 1,
                         height: 64,
                         paddingBottom: 10,
                         paddingTop: 8,
                     },
-                    tabBarActiveTintColor: Colors.primary.main,    // #1E3A8A azul
-                    tabBarInactiveTintColor: Colors.screen.textMuted, // #9AA3B8
+                    tabBarActiveTintColor: Colors.primary.main,    // #84CC16 verde lima
+                    tabBarInactiveTintColor: Colors.screen.textMuted, // #9CA3AF
                     tabBarLabelStyle: {
                         fontFamily: "Outfit_500Medium",
                         fontSize: 10,

@@ -41,12 +41,12 @@ export default function ScreenHeader({
                     styles.logoCircle,
                     logoImage
                         ? styles.logoCircleWhite
-                        : isLight ? styles.logoCircleBlueBg : styles.logoCircleBlueTransp,
+                        : isLight ? styles.logoCircleGreenBg : styles.logoCircleGreenTransp,
                 ]}>
                     {logoImage ? (
                         <Image source={logoImage} style={styles.logoImg} resizeMode="contain" />
                     ) : logoIcon ? (
-                        <Ionicons name={logoIcon} size={16} color={Colors.primary.light} />
+                        <Ionicons name={logoIcon} size={16} color={Colors.primary.main} />
                     ) : null}
                 </View>
                 <Text style={[styles.title, isLight ? styles.titleLight : styles.titleDark]}>
@@ -64,14 +64,14 @@ export default function ScreenHeader({
                                 size={24}
                                 color={
                                     action.badge
-                                        ? (action.activeColor ?? Colors.primary.light)
+                                        ? (action.activeColor ?? Colors.primary.main)
                                         : isLight ? Colors.screen.textSecondary : "rgba(255,255,255,0.75)"
                                 }
                             />
                             {action.badge && (
                                 <View style={[
                                     styles.badgeDot,
-                                    { borderColor: isLight ? Colors.screen.bg : "#0C1F5C" },
+                                    { borderColor: isLight ? Colors.screen.bg : "#1C1C1C" },
                                 ]} />
                             )}
                         </TouchableOpacity>
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
         borderBottomColor: Colors.screen.border,
     },
     headerDark: {
-        backgroundColor: "#0C1F5C",
+        backgroundColor: "#1C1C1C",
         borderBottomColor: "rgba(255,255,255,0.07)",
     },
     left: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -106,15 +106,15 @@ const styles = StyleSheet.create({
         overflow: "hidden",
     },
     logoCircleWhite: { backgroundColor: "#FFFFFF" },
-    logoCircleBlueBg: {
-        backgroundColor: Colors.screen.chipBlue,
+    logoCircleGreenBg: {
+        backgroundColor: Colors.primary.soft,
         borderWidth: 1,
         borderColor: Colors.screen.border,
     },
-    logoCircleBlueTransp: {
-        backgroundColor: "rgba(59,130,246,0.15)",
+    logoCircleGreenTransp: {
+        backgroundColor: "rgba(132,204,22,0.15)",
         borderWidth: 1,
-        borderColor: "rgba(59,130,246,0.3)",
+        borderColor: "rgba(132,204,22,0.30)",
     },
     logoImg: { width: 32, height: 32 },
     title: {
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     badgeDot: {
         position: "absolute", top: 4, right: 4,
         width: 8, height: 8, borderRadius: 4,
-        backgroundColor: Colors.primary.light,
+        backgroundColor: Colors.primary.main,
         borderWidth: 1.5,
     },
 });
