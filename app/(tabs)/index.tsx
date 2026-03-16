@@ -146,6 +146,10 @@ export default function IncidentsScreen() {
                             <IncidentCard
                                 item={item}
                                 currentUserId={user?.id}
+                                onPress={(inc) => router.push({
+                                    pathname: "/(tabs)/incident-detail",
+                                    params: { data: JSON.stringify(inc) },
+                                } as any)}
                                 onEdit={(inc) => router.push({ pathname: "/(tabs)/edit-incident", params: { id: inc.id } } as any)}
                             />
                         )}

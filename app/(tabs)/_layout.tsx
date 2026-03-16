@@ -10,15 +10,15 @@ export default function TabsLayout() {
                 screenOptions={{
                     headerShown: false,
                     tabBarStyle: {
-                        backgroundColor: Colors.screen.bg,        // #F8F8F8
-                        borderTopColor: Colors.screen.border,      // #E5E7EB
+                        backgroundColor: Colors.screen.bg,
+                        borderTopColor: Colors.screen.border,
                         borderTopWidth: 1,
                         height: 64,
                         paddingBottom: 10,
                         paddingTop: 8,
                     },
-                    tabBarActiveTintColor: Colors.primary.main,    // #84CC16 verde lima
-                    tabBarInactiveTintColor: Colors.screen.textMuted, // #9CA3AF
+                    tabBarActiveTintColor: Colors.primary.main,
+                    tabBarInactiveTintColor: Colors.screen.textMuted,
                     tabBarLabelStyle: {
                         fontFamily: "Outfit_500Medium",
                         fontSize: 10,
@@ -68,6 +68,10 @@ export default function TabsLayout() {
                 />
                 <Tabs.Screen
                     name="edit-incident"
+                    options={{ href: null }}
+                />
+                <Tabs.Screen
+                    name="incident-detail"
                     options={{ href: null }}
                 />
             </Tabs>

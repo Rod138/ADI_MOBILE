@@ -39,7 +39,7 @@ export default function ChangePasswordScreen() {
 
     return (
         <ScreenShell theme="light" scroll>
-            <BackButton theme="light" label="Volver al perfil" onPress={() => router.back()} />
+            <BackButton theme="light" label="Volver al perfil" onPress={() => router.replace("/(tabs)/profile")} />
 
             <FormPageHeader theme="light" icon="key-outline" title="Cambiar contraseña" />
 

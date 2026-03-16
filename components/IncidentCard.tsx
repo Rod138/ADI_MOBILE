@@ -29,12 +29,13 @@ export function getStatusStyle(name: string) {
 interface IncidentCardProps {
     item: Incident;
     currentUserId?: number;
+    onPress?: (item: Incident) => void;
     onEdit?: (item: Incident) => void;
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCardProps) {
+export default function IncidentCard({ item, currentUserId, onPress, onEdit }: IncidentCardProps) {
     const reportedBy = item.users
         ? `${item.users.name} ${item.users.ap}${item.users.am ? " " + item.users.am : ""}`.trim()
         : "—";
@@ -43,8 +44,9 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
     const { date, time } = formatDateTime(item.created_at);
     const isOwner = currentUserId !== undefined && item.usr_id === currentUserId;
 
+    const isPending = (item.inc_status?.name ?? "").toLowerCase().includes("pend");
     const withinEditWindow = Date.now() - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000;
-    const showEditBtn = isOwner && onEdit && withinEditWindow;
+    const showEditBtn = isOwner && onEdit && withinEditWindow && isPending;
 
     const editedLabel = item.edited_at ? (() => {
         const { date: ed, time: et } = formatDateTime(item.edited_at);
@@ -52,7 +54,11 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
     })() : null;
 
     return (
-        <View style={styles.card}>
+        <TouchableOpacity
+            style={styles.card}
+            activeOpacity={0.75}
+            onPress={() => onPress?.(item)}
+        >
             {/* Barra lateral de color de estado */}
             <View style={[styles.statusBar, { backgroundColor: ss.color }]} />
 
@@ -85,13 +91,9 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
 
                 {/* Área y tipo — solo texto, sin chips de color */}
                 <View style={styles.tagsRow}>
-                    <Text style={styles.tagText}>
-                        {item.areas?.name ?? "—"}
-                    </Text>
+                    <Text style={styles.tagText}>{item.areas?.name ?? "—"}</Text>
                     <Text style={styles.tagSep}>·</Text>
-                    <Text style={styles.tagText}>
-                        {item.inc_types?.name ?? "—"}
-                    </Text>
+                    <Text style={styles.tagText}>{item.inc_types?.name ?? "—"}</Text>
                 </View>
 
                 {/* Descripción */}
@@ -105,20 +107,25 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
                 {/* Footer */}
                 <View style={styles.footer}>
                     <Text style={styles.costText}>${item.cost ?? 0}</Text>
-
-                    {showEditBtn && (
-                        <TouchableOpacity
-                            style={styles.editBtn}
-                            onPress={() => onEdit!(item)}
-                            activeOpacity={0.75}
-                        >
-                            <Ionicons name="pencil-outline" size={13} color={Colors.screen.textSecondary} />
-                            <Text style={styles.editBtnText}>Editar</Text>
-                        </TouchableOpacity>
-                    )}
+                    <View style={styles.footerRight}>
+                        {showEditBtn && (
+                            <TouchableOpacity
+                                style={styles.editBtn}
+                                onPress={(e) => { e.stopPropagation?.(); onEdit!(item); }}
+                                activeOpacity={0.75}
+                            >
+                                <Ionicons name="pencil-outline" size={13} color={Colors.screen.textSecondary} />
+                                <Text style={styles.editBtnText}>Editar</Text>
+                            </TouchableOpacity>
+                        )}
+                        <View style={styles.detailHint}>
+                            <Text style={styles.detailHintText}>Ver detalle</Text>
+                            <Ionicons name="chevron-forward" size={12} color={Colors.screen.textMuted} />
+                        </View>
+                    </View>
                 </View>
             </View>
-        </View>
+        </TouchableOpacity>
     );
 }
 
@@ -237,6 +244,11 @@ const styles = StyleSheet.create({
         color: Colors.screen.textMuted,
         flex: 1,
     },
+    footerRight: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
     editBtn: {
         flexDirection: "row",
         alignItems: "center",
@@ -252,5 +264,15 @@ const styles = StyleSheet.create({
         fontFamily: "Outfit_500Medium",
         fontSize: 12,
         color: Colors.screen.textSecondary,
+    },
+    detailHint: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 2,
+    },
+    detailHintText: {
+        fontFamily: "Outfit_400Regular",
+        fontSize: 11,
+        color: Colors.screen.textMuted,
     },
 });
