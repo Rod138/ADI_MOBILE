@@ -24,10 +24,11 @@ export interface Incident {
     image: string | null;
     usr_id: number;
     area_id: number;
-    completed_at: string | null;  // antes: solved_at
+    completed_at: string | null;
     notes: string | null;
     cost: number | null;
     closed_at: string | null;
+    edited_at: string | null;
     status_id: number;
     type_id: number;
     // joins
@@ -52,6 +53,7 @@ export interface UpdateIncidentPayload {
     image: string | null;
     area_id: number;
     type_id: number;
+    edited_at: string;
 }
 
 // ─────────────────────────────────────────────

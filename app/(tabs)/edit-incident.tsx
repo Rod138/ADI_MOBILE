@@ -1,4 +1,3 @@
-import { formatDateTime } from "@/components/IncidentCard";
 import PrimaryButton from "@/components/PrimaryButton";
 import { BackButton, FormPageHeader, ScreenShell, SectionCard, StatusBanner } from "@/components/ui";
 import { Colors } from "@/constants/colors";
@@ -205,6 +204,7 @@ export default function EditIncidentScreen() {
             image: finalImage,
             area_id: areaId!,
             type_id: typeId!,
+            edited_at: new Date().toISOString(),
         };
 
         const ok = await updateIncident(incidentId, payload);
@@ -247,7 +247,6 @@ export default function EditIncidentScreen() {
     }
 
     const displayImage = imageUri ?? currentImage;
-    const { date, time } = formatDateTime(original.created_at);
 
     return (
         <ScreenShell theme="light" scroll>
@@ -257,7 +256,7 @@ export default function EditIncidentScreen() {
                 theme="light"
                 icon="pencil-outline"
                 title="Editar incidencia"
-                subtitle={`${date} · ${time}`}
+                subtitle={`#${incidentId} · ${original.created_at.slice(0, 10)}`}
             />
 
             <SectionCard theme="light">
@@ -469,9 +468,9 @@ const styles = StyleSheet.create({
         flexDirection: "row", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
         borderWidth: 1.5, borderColor: Colors.screen.border, backgroundColor: Colors.screen.card, minHeight: 110,
     },
-    textInput: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 15, color: Colors.screen.textPrimary },
     textAreaFocused: { borderColor: Colors.primary.light, backgroundColor: "#F0F6FF" },
     textAreaError: { borderColor: Colors.status.error },
+    textInput: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 15, color: Colors.screen.textPrimary, minHeight: 90, textAlignVertical: "top" },
     errorRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
     errorText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.error },
     imagePreview: { width: "100%", height: 180, borderRadius: 12, marginBottom: 10 },

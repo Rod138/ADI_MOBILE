@@ -44,6 +44,16 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
     const { date, time } = formatDateTime(item.created_at);
     const isOwner = currentUserId !== undefined && item.usr_id === currentUserId;
 
+    // Botón Editar solo visible durante las primeras 24h desde la creación
+    const withinEditWindow = Date.now() - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000;
+    const showEditBtn = isOwner && onEdit && withinEditWindow;
+
+    // Badge "Editada" con fecha y hora
+    const editedLabel = item.edited_at ? (() => {
+        const { date: ed, time: et } = formatDateTime(item.edited_at);
+        return `Editada · ${ed} ${et}`;
+    })() : null;
+
     return (
         <View style={styles.card}>
             <View style={[styles.statusBar, { backgroundColor: ss.color }]} />
@@ -65,6 +75,12 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
                             <Ionicons name="time-outline" size={11} color={Colors.screen.textMuted} />
                             <Text style={styles.dateText}>{time}</Text>
                         </View>
+                        {editedLabel && (
+                            <View style={styles.editedBadge}>
+                                <Ionicons name="create-outline" size={11} color="#7C6FAE" />
+                                <Text style={styles.editedText}>{editedLabel}</Text>
+                            </View>
+                        )}
                     </View>
                     <View style={[styles.statusBadge, { backgroundColor: ss.bg, borderColor: ss.border }]}>
                         <Ionicons name={ss.icon} size={12} color={ss.color} />
@@ -104,14 +120,14 @@ export default function IncidentCard({ item, currentUserId, onEdit }: IncidentCa
                     <Text style={styles.costLabel}>Costo:</Text>
                     <Text style={styles.costValue}>${item.cost ?? 0}</Text>
 
-                    {isOwner && onEdit && (
+                    {showEditBtn && (
                         <TouchableOpacity
                             style={styles.editBtn}
-                            onPress={() => onEdit(item)}
+                            onPress={() => onEdit!(item)}
                             activeOpacity={0.75}
                         >
                             <Ionicons name="pencil-outline" size={13} color={Colors.primary.main} />
-                            <Text style={styles.editText}>Editar</Text>
+                            <Text style={styles.editBtnText}>Editar</Text>
                         </TouchableOpacity>
                     )}
                 </View>
@@ -174,13 +190,19 @@ const styles = StyleSheet.create({
         flexDirection: "row", alignItems: "center", gap: 5,
         borderTopWidth: 1, borderTopColor: Colors.screen.border, paddingTop: 8,
     },
-    costLabel: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted, flex: 1 },
-    costValue: { fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.screen.textSecondary },
+    costLabel: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted },
+    costValue: { fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.screen.textSecondary, flex: 1 },
+    editedBadge: {
+        flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 3,
+        paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8,
+        backgroundColor: "#F5F3FF", borderWidth: 1, borderColor: "#DDD6FE", marginTop: 2,
+    },
+    editedText: { fontFamily: "Outfit_400Regular", fontSize: 10, color: "#7C6FAE" },
     editBtn: {
         flexDirection: "row", alignItems: "center", gap: 4,
         paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
         backgroundColor: Colors.screen.chipBlue,
         borderWidth: 1, borderColor: Colors.screen.border,
     },
-    editText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.main },
+    editBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.main },
 });
