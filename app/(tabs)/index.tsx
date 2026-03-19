@@ -7,9 +7,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator, Animated, Dimensions, FlatList,
+    ActivityIndicator,
+    Animated, Dimensions, FlatList,
     Platform, Pressable, ScrollView, StatusBar, StyleSheet,
-    Text, TouchableOpacity, View,
+    Text, TouchableOpacity, View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -19,7 +20,7 @@ const DRAWER_WIDTH = SCREEN_WIDTH * 0.72;
 export default function IncidentsScreen() {
     const { user } = useSession();
     const { areas, statuses, catalogsLoading } = useCatalogs();
-    const { incidents, isLoading, error, fetchIncidents } = useIncidents();
+    const { incidents, isLoading, error, fetchIncidents, deleteIncident } = useIncidents();
 
     const [activeStatusId, setActiveStatusId] = useState<number | undefined>();
     const [activeAreaId, setActiveAreaId] = useState<number | undefined>();
@@ -151,6 +152,9 @@ export default function IncidentsScreen() {
                                     params: { data: JSON.stringify(inc) },
                                 } as any)}
                                 onEdit={(inc) => router.push({ pathname: "/(tabs)/edit-incident", params: { id: inc.id } } as any)}
+                                onDelete={async (inc) => {
+                                    await deleteIncident(inc.id);
+                                }}
                             />
                         )}
                         contentContainerStyle={styles.list}

@@ -192,5 +192,34 @@ export function useIncidents() {
         }
     };
 
-    return { incidents, isLoading, error, fetchIncidents, createIncident, updateIncident };
+    const deleteIncident = async (id: number): Promise<boolean> => {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const { error: dbError } = await supabase
+                .from("incidents")
+                .delete()
+                .eq("id", id);
+
+            if (dbError) {
+                console.error("Error Supabase delete:", dbError.message);
+                setError(dbError.message);
+                return false;
+            }
+
+            // Refleja el borrado en el estado local sin refetch
+            setIncidents((prev) => prev.filter((inc) => inc.id !== id));
+
+            return true;
+        } catch (e: any) {
+            console.error("Error inesperado:", e?.message);
+            setError("No se pudo conectar al servidor.");
+            return false;
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return { incidents, isLoading, error, fetchIncidents, createIncident, updateIncident, deleteIncident };
 }
