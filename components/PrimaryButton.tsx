@@ -8,7 +8,7 @@ interface PrimaryButtonProps {
     isLoading?: boolean;
     disabled?: boolean;
     style?: ViewStyle;
-    variant?: "default" | "light" | "orange";
+    variant?: "default" | "light" | "orange" | "ghost";
 }
 
 export default function PrimaryButton({
@@ -20,16 +20,14 @@ export default function PrimaryButton({
     variant = "default",
 }: PrimaryButtonProps) {
     const isDisabled = disabled || isLoading;
-    const isLight = variant === "light";
-    const isOrange = variant === "orange";
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
     const handlePressIn = () => {
         Animated.spring(scaleAnim, {
-            toValue: 0.97,
+            toValue: 0.975,
             useNativeDriver: true,
-            speed: 50,
-            bounciness: 4,
+            speed: 60,
+            bounciness: 2,
         }).start();
     };
 
@@ -37,40 +35,32 @@ export default function PrimaryButton({
         Animated.spring(scaleAnim, {
             toValue: 1,
             useNativeDriver: true,
-            speed: 50,
+            speed: 40,
             bounciness: 4,
         }).start();
     };
 
-    const getButtonStyle = () => {
-        if (isDisabled) return styles.buttonDisabled;
-        if (isLight) return styles.buttonLight;
-        if (isOrange) return styles.buttonOrange;
-        return styles.buttonPrimary;
-    };
-
-    const getShadowStyle = () => {
-        if (isDisabled) return null;
-        if (isLight) return styles.shadowLight;
-        if (isOrange) return styles.shadowOrange;
-        return styles.shadowPrimary;
-    };
-
-    const getShineColor = () => {
-        if (isLight) return "rgba(255,255,255,0.30)";
-        if (isOrange) return "rgba(255,255,255,0.20)";
-        return "rgba(255,255,255,0.10)";
+    const getStyle = () => {
+        if (isDisabled) return styles.disabled;
+        switch (variant) {
+            case "light": return styles.light;
+            case "orange": return styles.orange;
+            case "ghost": return styles.ghost;
+            default: return styles.primary;
+        }
     };
 
     const getTextStyle = () => {
         if (isDisabled) return styles.textDisabled;
-        if (isLight) return styles.textLight;
-        if (isOrange) return styles.textOrange;
-        return styles.textPrimary;
+        switch (variant) {
+            case "light": return styles.textLight;
+            case "ghost": return styles.textGhost;
+            default: return styles.textDefault;
+        }
     };
 
     const getSpinnerColor = () => {
-        if (isLight) return Colors.primary.main;
+        if (variant === "light" || variant === "ghost") return Colors.primary.main;
         return "#FFFFFF";
     };
 
@@ -82,19 +72,13 @@ export default function PrimaryButton({
                 onPressOut={handlePressOut}
                 disabled={isDisabled}
                 activeOpacity={1}
-                style={[styles.buttonBase, getButtonStyle(), getShadowStyle()]}
+                style={[styles.base, getStyle()]}
             >
-                {/* Shine overlay */}
-                <Animated.View
-                    pointerEvents="none"
-                    style={[styles.shineOverlay, { backgroundColor: getShineColor() }]}
-                />
-
                 {isLoading ? (
                     <ActivityIndicator color={getSpinnerColor()} size="small" />
                 ) : (
                     <Text style={[styles.textBase, getTextStyle()]}>
-                        {label.toUpperCase()}
+                        {label}
                     </Text>
                 )}
             </TouchableOpacity>
@@ -103,60 +87,59 @@ export default function PrimaryButton({
 }
 
 const styles = StyleSheet.create({
-    buttonBase: {
-        height: 56,
-        borderRadius: 16,
+    base: {
+        height: 52,
+        borderRadius: 14,
         alignItems: "center",
         justifyContent: "center",
-        overflow: "hidden",
+        paddingHorizontal: 20,
     },
-    buttonDisabled: {
-        backgroundColor: "rgba(255,255,255,0.30)",
-    },
-    buttonLight: {
-        backgroundColor: Colors.white,
-    },
-    buttonPrimary: {
+    primary: {
         backgroundColor: Colors.primary.main,
-    },
-    buttonOrange: {
-        backgroundColor: Colors.secondary.main,  // #F97316
-    },
-    shadowLight: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.22,
-        shadowRadius: 14,
+        shadowColor: Colors.primary.dark,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
         elevation: 6,
     },
-    shadowPrimary: {
-        shadowColor: Colors.primary.main,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.45,
-        shadowRadius: 16,
-        elevation: 8,
+    light: {
+        backgroundColor: Colors.primary.soft,
+        borderWidth: 1.5,
+        borderColor: Colors.primary.muted,
     },
-    shadowOrange: {
+    orange: {
+        backgroundColor: Colors.secondary.main,
         shadowColor: Colors.secondary.main,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.40,
-        shadowRadius: 16,
-        elevation: 8,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        elevation: 6,
     },
-    shineOverlay: {
-        position: "absolute",
-        top: 0, left: 0, right: 0,
-        height: "50%",
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
+    ghost: {
+        backgroundColor: "transparent",
+        borderWidth: 1.5,
+        borderColor: Colors.screen.border,
     },
+    disabled: {
+        backgroundColor: Colors.neutral[200],
+    },
+
     textBase: {
-        fontSize: 13,
-        fontWeight: "800",
-        letterSpacing: 1.5,
+        fontFamily: "Outfit_700Bold",
+        fontSize: 15,
+        letterSpacing: 0.3,
     },
-    textDisabled: { opacity: 0.5 },
-    textLight: { color: Colors.primary.main },
-    textPrimary: { color: Colors.white },
-    textOrange: { color: Colors.white },
+    textDefault: {
+        color: Colors.white,
+    },
+    textLight: {
+        color: Colors.primary.dark,
+    },
+    textGhost: {
+        color: Colors.screen.textSecondary,
+    },
+    textDisabled: {
+        color: Colors.screen.textMuted,
+        fontFamily: "Outfit_500Medium",
+    },
 });

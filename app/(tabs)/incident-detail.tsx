@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-//  Helpers 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatFull(iso: string | null): string {
     if (!iso) return "—";
@@ -30,52 +30,50 @@ function formatFull(iso: string | null): string {
 function getStatusStyle(name: string) {
     const n = name?.toLowerCase() ?? "";
     if (n.includes("resuel") || n.includes("complet"))
-        return { color: "#059669", bg: "#ECFDF5", border: "#A7F3D0", icon: "checkmark-circle-outline" as const };
+        return { color: Colors.status.success, bg: Colors.status.successBg, border: Colors.status.successBorder, icon: "checkmark-circle" as const };
     if (n.includes("pend"))
-        return { color: "#D97706", bg: "#FFFBEB", border: "#FDE68A", icon: "time-outline" as const };
+        return { color: Colors.status.warning, bg: Colors.status.warningBg, border: Colors.status.warningBorder, icon: "time" as const };
     if (n.includes("cerr"))
-        return { color: "#6B7280", bg: "#F3F4F6", border: "#E5E7EB", icon: "lock-closed-outline" as const };
-    return { color: Colors.primary.main, bg: Colors.primary.soft, border: Colors.screen.border, icon: "ellipse-outline" as const };
+        return { color: Colors.screen.textMuted, bg: Colors.neutral[100], border: Colors.screen.border, icon: "lock-closed" as const };
+    return { color: Colors.primary.dark, bg: Colors.primary.soft, border: Colors.primary.muted, icon: "ellipse" as const };
 }
 
-//  Sub-componentes 
+// ── Sub-componentes ───────────────────────────────────────────────────────────
 
-function SectionTitle({ label }: { label: string }) {
+function SectionLabel({ label }: { label: string }) {
     return (
-        <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitleText}>{label}</Text>
-            <View style={styles.sectionTitleLine} />
+        <View style={styles.sectionLabel}>
+            <Text style={styles.sectionLabelText}>{label}</Text>
         </View>
     );
 }
 
-function InfoRow({
-    icon,
-    label,
-    value,
-    valueColor,
-}: {
+function InfoRow({ icon, label, value, valueColor, last = false }: {
     icon: keyof typeof Ionicons.glyphMap;
     label: string;
     value: string;
     valueColor?: string;
+    last?: boolean;
 }) {
     return (
-        <View style={styles.infoRow}>
-            <View style={styles.infoIconWrap}>
-                <Ionicons name={icon} size={15} color={Colors.primary.main} />
+        <>
+            <View style={styles.infoRow}>
+                <View style={styles.infoIcon}>
+                    <Ionicons name={icon} size={15} color={Colors.primary.main} />
+                </View>
+                <View style={styles.infoTexts}>
+                    <Text style={styles.infoLabel}>{label}</Text>
+                    <Text style={[styles.infoValue, valueColor ? { color: valueColor } : null]}>
+                        {value}
+                    </Text>
+                </View>
             </View>
-            <View style={styles.infoTexts}>
-                <Text style={styles.infoLabel}>{label}</Text>
-                <Text style={[styles.infoValue, valueColor ? { color: valueColor } : null]}>
-                    {value}
-                </Text>
-            </View>
-        </View>
+            {!last && <View style={styles.rowDivider} />}
+        </>
     );
 }
 
-//  Pantalla
+// ── Pantalla ──────────────────────────────────────────────────────────────────
 
 export default function IncidentDetailScreen() {
     const { data } = useLocalSearchParams<{ data: string }>();
@@ -83,11 +81,8 @@ export default function IncidentDetailScreen() {
 
     useEffect(() => {
         if (data) {
-            try {
-                setIncident(JSON.parse(data) as Incident);
-            } catch {
-                setIncident(null);
-            }
+            try { setIncident(JSON.parse(data) as Incident); }
+            catch { setIncident(null); }
         }
     }, [data]);
 
@@ -109,19 +104,18 @@ export default function IncidentDetailScreen() {
     const ss = getStatusStyle(statusName);
     const initials = reportedBy.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
+    const hasDates = incident.edited_at || incident.completed_at || incident.closed_at;
+
     return (
         <View style={styles.root}>
             <StatusBar barStyle="dark-content" backgroundColor={Colors.screen.bg} />
             <SafeAreaView style={{ flex: 1 }}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <BackButton
-                        theme="light"
-                        label="Incidencias"
-                        onPress={() => router.back()}
-                    />
+
+                {/* Top bar */}
+                <View style={styles.topBar}>
+                    <BackButton theme="light" label="Incidencias" onPress={() => router.back()} />
                     <View style={[styles.statusPill, { backgroundColor: ss.bg, borderColor: ss.border }]}>
-                        <Ionicons name={ss.icon} size={13} color={ss.color} />
+                        <Ionicons name={ss.icon} size={12} color={ss.color} />
                         <Text style={[styles.statusPillText, { color: ss.color }]}>{statusName}</Text>
                     </View>
                 </View>
@@ -130,15 +124,25 @@ export default function IncidentDetailScreen() {
                     contentContainerStyle={styles.scroll}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Hero — avatar + nombre + ID */}
-                    <View style={styles.hero}>
-                        <View style={styles.heroAvatar}>
-                            <Text style={styles.heroInitials}>{initials}</Text>
+                    {/* Hero */}
+                    <View style={styles.heroCard}>
+                        <View style={[styles.heroAvatar, { backgroundColor: ss.bg, borderColor: ss.border }]}>
+                            <Text style={[styles.heroInitials, { color: ss.color }]}>{initials}</Text>
                         </View>
-                        <View style={styles.heroTexts}>
+                        <View style={styles.heroInfo}>
                             <Text style={styles.heroName}>{reportedBy}</Text>
-                            <Text style={styles.heroId}>Incidencia</Text>
+                            <Text style={styles.heroDate}>
+                                {new Date(incident.created_at).toLocaleDateString("es-MX", {
+                                    day: "2-digit", month: "long", year: "numeric"
+                                })}
+                            </Text>
                         </View>
+                        {incident.edited_at && (
+                            <View style={styles.editedTag}>
+                                <Ionicons name="create-outline" size={11} color={Colors.primary.dark} />
+                                <Text style={styles.editedTagText}>Editada</Text>
+                            </View>
+                        )}
                     </View>
 
                     {/* Imagen */}
@@ -150,107 +154,81 @@ export default function IncidentDetailScreen() {
                         />
                     ) : (
                         <View style={styles.noImage}>
-                            <Ionicons name="image-outline" size={28} color={Colors.screen.textMuted} />
+                            <Ionicons name="image-outline" size={22} color={Colors.screen.textMuted} />
                             <Text style={styles.noImageText}>Sin imagen adjunta</Text>
                         </View>
                     )}
 
                     {/* Descripción */}
                     <View style={styles.card}>
-                        <SectionTitle label="Descripción" />
-                        <Text style={styles.descriptionText}>{incident.description}</Text>
+                        <SectionLabel label="Descripción" />
+                        <Text style={styles.description}>{incident.description}</Text>
                     </View>
 
                     {/* Clasificación */}
                     <View style={styles.card}>
-                        <SectionTitle label="Clasificación" />
-                        <InfoRow
-                            icon="grid-outline"
-                            label="Área"
-                            value={incident.areas?.name ?? "—"}
-                        />
-                        <View style={styles.rowDivider} />
-                        <InfoRow
-                            icon="alert-circle-outline"
-                            label="Tipo de incidencia"
-                            value={incident.inc_types?.name ?? "—"}
-                        />
-                        <View style={styles.rowDivider} />
+                        <SectionLabel label="Clasificación" />
+                        <InfoRow icon="location-outline" label="Área" value={incident.areas?.name ?? "—"} />
+                        <InfoRow icon="pricetag-outline" label="Tipo de incidencia" value={incident.inc_types?.name ?? "—"} />
                         <InfoRow
                             icon="cash-outline"
                             label="Costo estimado"
                             value={incident.cost != null ? `$${incident.cost.toLocaleString("es-MX")}` : "Sin asignar"}
+                            last
                         />
                     </View>
 
                     {/* Fechas */}
                     <View style={styles.card}>
-                        <SectionTitle label="Fechas" />
-                        <InfoRow
-                            icon="calendar-outline"
-                            label="Reportada"
-                            value={formatFull(incident.created_at)}
-                        />
+                        <SectionLabel label="Línea de tiempo" />
+                        <InfoRow icon="calendar-outline" label="Reportada" value={formatFull(incident.created_at)} last={!hasDates} />
                         {incident.edited_at && (
-                            <>
-                                <View style={styles.rowDivider} />
-                                <InfoRow
-                                    icon="create-outline"
-                                    label="Última edición"
-                                    value={formatFull(incident.edited_at)}
-                                />
-                            </>
+                            <InfoRow icon="create-outline" label="Última edición" value={formatFull(incident.edited_at)} last={!incident.completed_at && !incident.closed_at} />
                         )}
                         {incident.completed_at && (
-                            <>
-                                <View style={styles.rowDivider} />
-                                <InfoRow
-                                    icon="checkmark-done-outline"
-                                    label="Completada"
-                                    value={formatFull(incident.completed_at)}
-                                    valueColor="#059669"
-                                />
-                            </>
+                            <InfoRow
+                                icon="checkmark-done-outline"
+                                label="Completada"
+                                value={formatFull(incident.completed_at)}
+                                valueColor={Colors.status.success}
+                                last={!incident.closed_at}
+                            />
                         )}
                         {incident.closed_at && (
-                            <>
-                                <View style={styles.rowDivider} />
-                                <InfoRow
-                                    icon="lock-closed-outline"
-                                    label="Cerrada"
-                                    value={formatFull(incident.closed_at)}
-                                    valueColor="#6B7280"
-                                />
-                            </>
+                            <InfoRow
+                                icon="lock-closed-outline"
+                                label="Cerrada"
+                                value={formatFull(incident.closed_at)}
+                                valueColor={Colors.screen.textMuted}
+                                last
+                            />
                         )}
                     </View>
 
                     {/* Notas del administrador */}
                     <View style={styles.card}>
-                        <SectionTitle label="Notas del administrador" />
+                        <SectionLabel label="Notas del administrador" />
                         {incident.notes ? (
-                            <Text style={styles.notesText}>{incident.notes}</Text>
+                            <Text style={styles.notes}>{incident.notes}</Text>
                         ) : (
                             <View style={styles.emptyNotes}>
-                                <Ionicons name="document-text-outline" size={20} color={Colors.screen.textMuted} />
+                                <Ionicons name="document-text-outline" size={18} color={Colors.screen.textMuted} />
                                 <Text style={styles.emptyNotesText}>Sin notas por el momento</Text>
                             </View>
                         )}
                     </View>
-
                 </ScrollView>
             </SafeAreaView>
         </View>
     );
 }
 
-
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
     centered: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-    // Header
-    header: {
+    // Top bar
+    topBar: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
@@ -267,7 +245,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         paddingVertical: 5,
         borderRadius: 20,
-        borderWidth: 1,
+        borderWidth: 1.5,
     },
     statusPillText: {
         fontFamily: "Outfit_600SemiBold",
@@ -276,61 +254,76 @@ const styles = StyleSheet.create({
 
     scroll: {
         paddingHorizontal: 16,
-        paddingTop: 16,
+        paddingTop: 14,
         paddingBottom: 40,
-        gap: 12,
+        gap: 10,
     },
 
     // Hero
-    hero: {
+    heroCard: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 14,
+        gap: 12,
         backgroundColor: Colors.screen.card,
-        borderRadius: 14,
+        borderRadius: 16,
         borderWidth: 1,
         borderColor: Colors.screen.border,
         padding: 16,
     },
     heroAvatar: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: "#4D7C0F",
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        borderWidth: 1.5,
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
     },
     heroInitials: {
         fontFamily: "Outfit_700Bold",
-        fontSize: 18,
-        color: "#FFFFFF",
+        fontSize: 17,
         letterSpacing: 1,
     },
-    heroTexts: { flex: 1, gap: 3 },
+    heroInfo: { flex: 1, gap: 3 },
     heroName: {
         fontFamily: "Outfit_700Bold",
-        fontSize: 16,
+        fontSize: 15,
         color: Colors.screen.textPrimary,
     },
-    heroId: {
+    heroDate: {
         fontFamily: "Outfit_400Regular",
         fontSize: 12,
         color: Colors.screen.textMuted,
     },
+    editedTag: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 3,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        backgroundColor: Colors.primary.soft,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: Colors.primary.muted,
+    },
+    editedTagText: {
+        fontFamily: "Outfit_600SemiBold",
+        fontSize: 10,
+        color: Colors.primary.dark,
+    },
 
-    // Imagen
+    // Image
     image: {
         width: "100%",
         height: 220,
-        borderRadius: 14,
+        borderRadius: 16,
         borderWidth: 1,
         borderColor: Colors.screen.border,
     },
     noImage: {
-        height: 80,
+        height: 68,
         borderRadius: 14,
-        borderWidth: 1,
+        borderWidth: 1.5,
         borderColor: Colors.screen.border,
         borderStyle: "dashed",
         backgroundColor: Colors.screen.card,
@@ -348,93 +341,78 @@ const styles = StyleSheet.create({
     // Cards
     card: {
         backgroundColor: Colors.screen.card,
-        borderRadius: 14,
+        borderRadius: 16,
         borderWidth: 1,
         borderColor: Colors.screen.border,
-        paddingHorizontal: 16,
-        paddingTop: 14,
-        paddingBottom: 6,
+        padding: 16,
         gap: 0,
     },
 
-    // Section title
-    sectionTitleRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-        marginBottom: 12,
+    // Section label
+    sectionLabel: {
+        marginBottom: 14,
     },
-    sectionTitleText: {
+    sectionLabelText: {
         fontFamily: "Outfit_700Bold",
         fontSize: 11,
         color: Colors.screen.textMuted,
         letterSpacing: 1.4,
         textTransform: "uppercase",
     },
-    sectionTitleLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: Colors.screen.border,
-    },
 
-    // Info row
+    // Info rows
     infoRow: {
         flexDirection: "row",
-        alignItems: "flex-start",
+        alignItems: "center",
         gap: 12,
         paddingVertical: 10,
     },
-    infoIconWrap: {
-        width: 30,
-        height: 30,
-        borderRadius: 8,
+    infoIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 9,
         backgroundColor: Colors.primary.soft,
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
-        marginTop: 1,
     },
     infoTexts: { flex: 1, gap: 2 },
     infoLabel: {
         fontFamily: "Outfit_400Regular",
         fontSize: 11,
         color: Colors.screen.textMuted,
-        letterSpacing: 0.3,
     },
     infoValue: {
         fontFamily: "Outfit_600SemiBold",
-        fontSize: 14,
+        fontSize: 13,
         color: Colors.screen.textPrimary,
     },
     rowDivider: {
         height: 1,
         backgroundColor: Colors.screen.border,
-        marginLeft: 42,
+        marginLeft: 44,
     },
 
-    // Descripción
-    descriptionText: {
+    // Description
+    description: {
         fontFamily: "Outfit_400Regular",
         fontSize: 14,
         color: Colors.screen.textSecondary,
         lineHeight: 22,
-        paddingBottom: 10,
     },
 
-    // Notas
-    notesText: {
+    // Notes
+    notes: {
         fontFamily: "Outfit_400Regular",
         fontSize: 14,
         color: Colors.screen.textSecondary,
         lineHeight: 22,
-        paddingBottom: 10,
     },
     emptyNotes: {
         flexDirection: "row",
         alignItems: "center",
         gap: 8,
-        paddingVertical: 14,
-        paddingBottom: 16,
+        paddingVertical: 10,
     },
     emptyNotesText: {
         fontFamily: "Outfit_400Regular",

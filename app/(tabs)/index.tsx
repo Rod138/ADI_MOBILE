@@ -7,20 +7,19 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Animated, Dimensions, FlatList,
+    ActivityIndicator, Animated, Dimensions, FlatList,
     Platform, Pressable, ScrollView, StatusBar, StyleSheet,
-    Text, TouchableOpacity, View
+    Text, TouchableOpacity, View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const DRAWER_WIDTH = SCREEN_WIDTH * 0.72;
+const DRAWER_WIDTH = SCREEN_WIDTH * 0.75;
 
 export default function IncidentsScreen() {
     const { user } = useSession();
     const { areas, statuses, catalogsLoading } = useCatalogs();
-    const { incidents, isLoading, error, fetchIncidents, deleteIncident } = useIncidents();
+    const { incidents, isLoading, error, fetchIncidents } = useIncidents();
 
     const [activeStatusId, setActiveStatusId] = useState<number | undefined>();
     const [activeAreaId, setActiveAreaId] = useState<number | undefined>();
@@ -46,15 +45,17 @@ export default function IncidentsScreen() {
     };
     const selectArea = (id?: number) => { setActiveAreaId(id); closeDrawer(); };
     const activeAreaName = areas.find((a) => a.id === activeAreaId)?.name;
+    const filtersActive = activeStatusId !== undefined || activeAreaId !== undefined;
 
     return (
         <View style={styles.root}>
-            <StatusBar barStyle="light-content" backgroundColor="#1C1C1C" />
+            <StatusBar barStyle="light-content" backgroundColor="#1A1A1A" />
 
             <SafeAreaView style={styles.safeArea}>
                 <ScreenHeader
                     theme="dark"
                     title="ADI"
+                    subtitle="Administrador de Incidencias"
                     logoImage={require("@/assets/images/logo.png")}
                     rightActions={[
                         { icon: "person-circle-outline", onPress: () => router.push("/(tabs)/profile" as any) },
@@ -63,19 +64,28 @@ export default function IncidentsScreen() {
                 />
 
                 {/* Status tabs */}
-                {catalogsLoading ? (
-                    <View style={styles.tabsLoading}>
-                        <ActivityIndicator size="small" color={Colors.screen.textMuted} />
-                    </View>
-                ) : (
-                    <View style={styles.tabsWrapper}>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+                <View style={styles.tabsContainer}>
+                    {catalogsLoading ? (
+                        <View style={styles.tabsLoading}>
+                            <ActivityIndicator size="small" color={Colors.screen.textMuted} />
+                        </View>
+                    ) : (
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.tabs}
+                        >
                             <TouchableOpacity
                                 onPress={() => setActiveStatusId(undefined)}
-                                style={[styles.tab, activeStatusId === undefined && styles.tabAllActive]}
+                                style={[styles.tab, activeStatusId === undefined && styles.tabActive]}
                                 activeOpacity={0.7}
                             >
-                                <Text style={[styles.tabText, activeStatusId === undefined && styles.tabTextAllActive]}>
+                                <Ionicons
+                                    name="apps"
+                                    size={12}
+                                    color={activeStatusId === undefined ? "#fff" : Colors.screen.textMuted}
+                                />
+                                <Text style={[styles.tabText, activeStatusId === undefined && styles.tabTextActive]}>
                                     Todas
                                 </Text>
                             </TouchableOpacity>
@@ -86,58 +96,75 @@ export default function IncidentsScreen() {
                                     <TouchableOpacity
                                         key={s.id}
                                         onPress={() => setActiveStatusId(s.id)}
-                                        style={[styles.tab, isActive && styles.tabStatusActive]}
+                                        style={[styles.tab, isActive && styles.tabActive, isActive && { borderColor: ss.color, backgroundColor: ss.color + "22" }]}
                                         activeOpacity={0.7}
                                     >
-                                        <Ionicons name={ss.icon} size={12} color={isActive ? "#FFFFFF" : Colors.screen.textMuted} style={{ marginRight: 4 }} />
-                                        <Text style={[styles.tabText, isActive && styles.tabTextStatusActive]}>
+                                        <Ionicons
+                                            name={ss.icon}
+                                            size={12}
+                                            color={isActive ? ss.color : Colors.screen.textMuted}
+                                        />
+                                        <Text style={[styles.tabText, isActive && { color: ss.color, fontFamily: "Outfit_600SemiBold" }]}>
                                             {s.name}
                                         </Text>
                                     </TouchableOpacity>
                                 );
                             })}
                         </ScrollView>
+                    )}
+                </View>
+
+                {/* Active filters banner */}
+                {filtersActive && (
+                    <View style={styles.filterBannerRow}>
+                        {activeAreaId !== undefined && (
+                            <TouchableOpacity
+                                style={styles.filterChip}
+                                onPress={() => setActiveAreaId(undefined)}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="location" size={11} color={Colors.primary.dark} />
+                                <Text style={styles.filterChipText}>{activeAreaName}</Text>
+                                <Ionicons name="close" size={12} color={Colors.primary.dark} />
+                            </TouchableOpacity>
+                        )}
                     </View>
                 )}
 
-                {/* Banner filtro activo */}
-                {activeAreaId !== undefined && (
-                    <View style={styles.filterBanner}>
-                        <Ionicons name="funnel" size={12} color="#FFFFFF" />
-                        <Text style={styles.filterText}>Área: {activeAreaName}</Text>
-                        <TouchableOpacity onPress={() => setActiveAreaId(undefined)}>
-                            <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.7)" />
-                        </TouchableOpacity>
-                    </View>
-                )}
-
-                {/* Contador */}
-                {!isLoading && !error && (
-                    <View style={styles.resultsBar}>
-                        <Text style={styles.resultsText}>
-                            {incidents.length} {incidents.length === 1 ? "incidencia" : "incidencias"}
-                            {activeStatusId !== undefined ? ` · ${statuses.find(s => s.id === activeStatusId)?.name}` : ""}
-                            {activeAreaId !== undefined ? ` · ${activeAreaName}` : ""}
-                        </Text>
-                    </View>
-                )}
-
-                {/* Lista */}
+                {/* Content */}
                 {isLoading ? (
                     <View style={styles.centered}>
-                        <ActivityIndicator size="large" color={Colors.primary.main} />
-                        <Text style={styles.emptyText}>Cargando incidencias...</Text>
+                        <View style={styles.loadingCard}>
+                            <ActivityIndicator size="large" color={Colors.primary.main} />
+                            <Text style={styles.loadingText}>Cargando incidencias...</Text>
+                        </View>
                     </View>
                 ) : error ? (
                     <View style={styles.centered}>
-                        <Ionicons name="cloud-offline-outline" size={40} color={Colors.screen.textMuted} />
-                        <Text style={styles.emptyText}>{error}</Text>
+                        <View style={styles.emptyCard}>
+                            <View style={styles.emptyIconWrap}>
+                                <Ionicons name="cloud-offline-outline" size={32} color={Colors.screen.textMuted} />
+                            </View>
+                            <Text style={styles.emptyTitle}>Sin conexión</Text>
+                            <Text style={styles.emptyText}>{error}</Text>
+                            <TouchableOpacity
+                                style={styles.retryBtn}
+                                onPress={() => fetchIncidents(activeStatusId, activeAreaId)}
+                            >
+                                <Ionicons name="refresh" size={14} color={Colors.primary.dark} />
+                                <Text style={styles.retryText}>Reintentar</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 ) : incidents.length === 0 ? (
                     <View style={styles.centered}>
-                        <Ionicons name="document-text-outline" size={44} color={Colors.screen.textMuted} />
-                        <Text style={styles.emptyTitle}>Sin incidencias</Text>
-                        <Text style={styles.emptyText}>No hay registros con los filtros actuales.</Text>
+                        <View style={styles.emptyCard}>
+                            <View style={styles.emptyIconWrap}>
+                                <Ionicons name="document-text-outline" size={32} color={Colors.screen.textMuted} />
+                            </View>
+                            <Text style={styles.emptyTitle}>Sin incidencias</Text>
+                            <Text style={styles.emptyText}>No hay registros con los filtros actuales.</Text>
+                        </View>
                     </View>
                 ) : (
                     <FlatList
@@ -152,9 +179,6 @@ export default function IncidentsScreen() {
                                     params: { data: JSON.stringify(inc) },
                                 } as any)}
                                 onEdit={(inc) => router.push({ pathname: "/(tabs)/edit-incident", params: { id: inc.id } } as any)}
-                                onDelete={async (inc) => {
-                                    await deleteIncident(inc.id);
-                                }}
                             />
                         )}
                         contentContainerStyle={styles.list}
@@ -174,25 +198,43 @@ export default function IncidentsScreen() {
                     <Animated.View style={[styles.drawer, { transform: [{ translateX: drawerAnim }] }]}>
                         <SafeAreaView style={styles.drawerSafe}>
                             <View style={styles.drawerHeader}>
-                                <Text style={styles.drawerTitle}>Filtrar por área</Text>
-                                <TouchableOpacity onPress={closeDrawer}>
-                                    <Ionicons name="close" size={22} color={Colors.screen.textSecondary} />
+                                <View>
+                                    <Text style={styles.drawerTitle}>Filtrar área</Text>
+                                    <Text style={styles.drawerSubtitle}>Selecciona una zona</Text>
+                                </View>
+                                <TouchableOpacity
+                                    onPress={closeDrawer}
+                                    style={styles.drawerClose}
+                                >
+                                    <Ionicons name="close" size={18} color={Colors.screen.textSecondary} />
                                 </TouchableOpacity>
                             </View>
-                            <ScrollView showsVerticalScrollIndicator={false}>
-                                {[{ id: undefined, name: "Todas las áreas", icon: "apps-outline" as const }, ...areas.map(a => ({ ...a, icon: "grid-outline" as const }))].map((item) => {
+                            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.drawerList}>
+                                {[
+                                    { id: undefined as number | undefined, name: "Todas las áreas", icon: "apps-outline" as const },
+                                    ...areas.map(a => ({ ...a, icon: "grid-outline" as const }))
+                                ].map((item) => {
                                     const isActive = activeAreaId === item.id;
                                     return (
                                         <TouchableOpacity
                                             key={item.id ?? "all"}
                                             style={[styles.drawerItem, isActive && styles.drawerItemActive]}
                                             onPress={() => selectArea(item.id)}
+                                            activeOpacity={0.7}
                                         >
-                                            <Ionicons name={item.icon} size={18} color={isActive ? "#FFFFFF" : Colors.screen.textSecondary} />
+                                            <View style={[styles.drawerItemIcon, isActive && styles.drawerItemIconActive]}>
+                                                <Ionicons
+                                                    name={item.icon}
+                                                    size={16}
+                                                    color={isActive ? Colors.primary.dark : Colors.screen.textSecondary}
+                                                />
+                                            </View>
                                             <Text style={[styles.drawerItemText, isActive && styles.drawerItemTextActive]}>
                                                 {item.name}
                                             </Text>
-                                            {isActive && <Ionicons name="checkmark" size={16} color="#FFFFFF" style={{ marginLeft: "auto" }} />}
+                                            {isActive && (
+                                                <Ionicons name="checkmark-circle" size={16} color={Colors.primary.main} />
+                                            )}
                                         </TouchableOpacity>
                                     );
                                 })}
@@ -208,55 +250,254 @@ export default function IncidentsScreen() {
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
     safeArea: { flex: 1 },
-    tabsLoading: { height: 50, alignItems: "center", justifyContent: "center", backgroundColor: Colors.screen.card },
-    tabsWrapper: { backgroundColor: Colors.screen.card, borderBottomWidth: 1, borderBottomColor: Colors.screen.border },
-    tabs: { paddingHorizontal: 16, paddingVertical: 8, gap: 6, alignItems: "center" },
-    tab: {
-        flexDirection: "row", alignItems: "center",
-        paddingHorizontal: 12, paddingVertical: 6,
-        borderRadius: 20, borderWidth: 1,
-        borderColor: Colors.screen.border, backgroundColor: Colors.screen.bg,
-    },
-    tabAllActive: { borderColor: "#4D7C0F", backgroundColor: "#4D7C0F" },
-    tabStatusActive: { borderColor: "#4D7C0F", backgroundColor: "#4D7C0F" },
-    tabText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.screen.textMuted },
-    tabTextAllActive: { fontFamily: "Outfit_700Bold", color: "#FFFFFF" },
-    tabTextStatusActive: { fontFamily: "Outfit_700Bold", color: "#FFFFFF" },
-    filterBanner: {
-        flexDirection: "row", alignItems: "center", gap: 6,
-        marginHorizontal: 16, marginTop: 10,
-        paddingHorizontal: 12, paddingVertical: 7,
-        backgroundColor: "#4D7C0F",
-        borderRadius: 10, borderWidth: 1, borderColor: "#4D7C0F",
-    },
-    filterText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: "#FFFFFF", flex: 1 },
-    resultsBar: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 2 },
-    resultsText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted },
-    list: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 20 },
-    centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
-    emptyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 16, color: Colors.screen.textSecondary },
-    emptyText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: Colors.screen.textMuted, textAlign: "center" },
-    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.35)" },
-    drawer: {
-        position: "absolute", top: 0, bottom: 0, right: 0, width: DRAWER_WIDTH,
+
+    // Tabs
+    tabsContainer: {
         backgroundColor: Colors.screen.card,
-        borderLeftWidth: 1, borderLeftColor: Colors.screen.border,
-        shadowColor: "#000", shadowOffset: { width: -4, height: 0 },
-        shadowOpacity: 0.12, shadowRadius: 16, elevation: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.screen.border,
     },
-    drawerSafe: { flex: 1, paddingTop: Platform.OS === "android" ? 40 : 0 },
+    tabsLoading: {
+        height: 52,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    tabs: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        gap: 6,
+        alignItems: "center",
+    },
+    tab: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        borderWidth: 1.5,
+        borderColor: Colors.screen.border,
+        backgroundColor: Colors.screen.bg,
+    },
+    tabActive: {
+        borderColor: Colors.primary.main,
+        backgroundColor: Colors.primary.main,
+    },
+    tabText: {
+        fontFamily: "Outfit_500Medium",
+        fontSize: 12,
+        color: Colors.screen.textMuted,
+    },
+    tabTextActive: {
+        fontFamily: "Outfit_600SemiBold",
+        color: "#FFFFFF",
+    },
+
+    // Filter banner
+    filterBannerRow: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        paddingHorizontal: 16,
+        paddingTop: 10,
+        gap: 6,
+    },
+    filterChip: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        backgroundColor: Colors.primary.muted,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: Colors.primary.muted,
+    },
+    filterChipText: {
+        fontFamily: "Outfit_600SemiBold",
+        fontSize: 12,
+        color: Colors.primary.dark,
+    },
+
+    // Results bar
+    resultsBar: {
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 4,
+    },
+    resultsText: {
+        fontFamily: "Outfit_400Regular",
+        fontSize: 12,
+        color: Colors.screen.textMuted,
+    },
+    resultsCount: {
+        fontFamily: "Outfit_700Bold",
+        color: Colors.screen.textSecondary,
+    },
+
+    // List
+    list: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 20 },
+
+    // Empty & loading states
+    centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
+    loadingCard: {
+        backgroundColor: "transparent",
+        padding: 32,
+        alignItems: "center",
+        gap: 14,
+        width: "100%",
+        maxWidth: 260,
+    },
+    loadingText: {
+        fontFamily: "Outfit_500Medium",
+        fontSize: 14,
+        color: Colors.screen.textMuted,
+    },
+    emptyCard: {
+        backgroundColor: Colors.screen.card,
+        borderRadius: 20,
+        padding: 32,
+        alignItems: "center",
+        gap: 10,
+        borderWidth: 1,
+        borderColor: Colors.screen.border,
+        width: "100%",
+        maxWidth: 300,
+    },
+    emptyIconWrap: {
+        width: 64,
+        height: 64,
+        borderRadius: 20,
+        backgroundColor: Colors.neutral[100],
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 4,
+    },
+    emptyTitle: {
+        fontFamily: "Outfit_600SemiBold",
+        fontSize: 16,
+        color: Colors.screen.textSecondary,
+    },
+    emptyText: {
+        fontFamily: "Outfit_400Regular",
+        fontSize: 13,
+        color: Colors.screen.textMuted,
+        textAlign: "center",
+        lineHeight: 19,
+    },
+    retryBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        marginTop: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 9,
+        borderRadius: 10,
+        backgroundColor: Colors.primary.soft,
+        borderWidth: 1,
+        borderColor: Colors.primary.muted,
+    },
+    retryText: {
+        fontFamily: "Outfit_600SemiBold",
+        fontSize: 13,
+        color: Colors.primary.dark,
+    },
+
+    // Overlay
+    overlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "rgba(0,0,0,0.40)",
+    },
+
+    // Drawer
+    drawer: {
+        position: "absolute",
+        top: 0,
+        bottom: 0,
+        right: 0,
+        width: DRAWER_WIDTH,
+        backgroundColor: Colors.screen.card,
+        borderLeftWidth: 1,
+        borderLeftColor: Colors.screen.border,
+        shadowColor: "#000",
+        shadowOffset: { width: -6, height: 0 },
+        shadowOpacity: 0.14,
+        shadowRadius: 20,
+        elevation: 20,
+    },
+    drawerSafe: {
+        flex: 1,
+        paddingTop: Platform.OS === "android" ? 40 : 0,
+    },
     drawerHeader: {
-        flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-        paddingHorizontal: 20, paddingVertical: 16,
-        borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingHorizontal: 20,
+        paddingVertical: 18,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.screen.border,
     },
-    drawerTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary },
+    drawerTitle: {
+        fontFamily: "Outfit_700Bold",
+        fontSize: 17,
+        color: Colors.screen.textPrimary,
+    },
+    drawerSubtitle: {
+        fontFamily: "Outfit_400Regular",
+        fontSize: 12,
+        color: Colors.screen.textMuted,
+        marginTop: 2,
+    },
+    drawerClose: {
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        backgroundColor: Colors.neutral[100],
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: Colors.screen.border,
+    },
+    drawerList: {
+        padding: 12,
+        gap: 4,
+    },
     drawerItem: {
-        flexDirection: "row", alignItems: "center", gap: 12,
-        paddingHorizontal: 20, paddingVertical: 15,
-        borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 13,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "transparent",
     },
-    drawerItemActive: { backgroundColor: "#4D7C0F" },
-    drawerItemText: { fontFamily: "Outfit_400Regular", fontSize: 14, color: Colors.screen.textSecondary },
-    drawerItemTextActive: { fontFamily: "Outfit_600SemiBold", color: "#FFFFFF" },
+    drawerItemActive: {
+        backgroundColor: Colors.primary.soft,
+        borderColor: Colors.primary.muted,
+    },
+    drawerItemIcon: {
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        backgroundColor: Colors.neutral[100],
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: Colors.screen.border,
+    },
+    drawerItemIconActive: {
+        backgroundColor: Colors.primary.muted,
+        borderColor: Colors.primary.muted,
+    },
+    drawerItemText: {
+        flex: 1,
+        fontFamily: "Outfit_500Medium",
+        fontSize: 14,
+        color: Colors.screen.textSecondary,
+    },
+    drawerItemTextActive: {
+        fontFamily: "Outfit_600SemiBold",
+        color: Colors.primary.dark,
+    },
 });

@@ -1,46 +1,66 @@
 export const Colors = {
     primary: {
-        main: "#84CC16",
-        light: "#BEF264",
-        soft: "#ECFCCB",
+        main: "#65A30D",       // lime-600
+        light: "#A3E635",      // lime-400
+        soft: "#F7FEE7",       // lime-50
+        muted: "#ECFCCB",      // lime-100
+        dark: "#3F6212",       // lime-800
     },
     secondary: {
-        main: "#F97316",
-        light: "#FB923C",
-        soft: "#FFEDD5",
+        main: "#EA580C",       // orange-600
+        light: "#FB923C",      // orange-400
+        soft: "#FFF7ED",       // orange-50
     },
 
-    // Neutros
+    // Neutros más cálidos
     neutral: {
-        900: "#1C1C1C",
-        700: "#2D2D2D",
-        400: "#9CA3AF",
-        200: "#E5E7EB",
-        50: "#F8F8F8",
+        950: "#111111",
+        900: "#1A1A1A",
+        800: "#262626",
+        700: "#3D3D3D",
+        500: "#737373",
+        400: "#A3A3A3",
+        300: "#D4D4D4",
+        200: "#E5E5E5",
+        100: "#F5F5F5",
+        50: "#FAFAFA",
     },
 
     // Estados funcionales
     status: {
         success: "#16A34A",
+        successBg: "#F0FDF4",
+        successBorder: "#BBF7D0",
         error: "#DC2626",
-        warning: "#F59E0B",
+        errorBg: "#FEF2F2",
+        errorBorder: "#FECACA",
+        warning: "#D97706",
+        warningBg: "#FFFBEB",
+        warningBorder: "#FDE68A",
         info: "#0284C7",
+        infoBg: "#F0F9FF",
+        infoBorder: "#BAE6FD",
     },
 
-    // Blancos
     white: "#FFFFFF",
 
     screen: {
-        bg: "#F8F8F8",
+        bg: "#F5F5F5",
         card: "#FFFFFF",
-        border: "#E5E7EB",
-        chipBlue: "#ECFCCB",
-        chipBlueTxt: "#4D7C0F",
-        chipPurple: "#FFEDD5",
-        chipPurpleTxt: "#C44B00",
-        textPrimary: "#2D2D2D",
-        textSecondary: "#4B5563",
-        textMuted: "#9CA3AF",
-        iconMuted: "#9CA3AF",
+        cardElevated: "#FFFFFF",
+        border: "#E5E5E5",
+        borderStrong: "#D4D4D4",
+        // Chips
+        chipBlue: "#F7FEE7",
+        chipBlueTxt: "#3F6212",
+        chipPurple: "#FFF7ED",
+        chipPurpleTxt: "#C2410C",
+        // Texto
+        textPrimary: "#1A1A1A",
+        textSecondary: "#525252",
+        textMuted: "#A3A3A3",
+        iconMuted: "#A3A3A3",
+        // Overlay
+        overlay: "rgba(0,0,0,0.45)",
     },
 } as const;

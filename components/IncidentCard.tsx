@@ -1,8 +1,7 @@
 import { Colors } from "@/constants/colors";
 import { type Incident } from "@/hooks/useIncidents";
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
-import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -17,12 +16,36 @@ export function formatDateTime(iso: string) {
 export function getStatusStyle(name: string) {
     const n = name?.toLowerCase() ?? "";
     if (n.includes("resuel") || n.includes("complet"))
-        return { color: "#059669", bg: "#ECFDF5", border: "#A7F3D0", icon: "checkmark-circle-outline" as const };
+        return {
+            color: Colors.status.success,
+            bg: Colors.status.successBg,
+            border: Colors.status.successBorder,
+            icon: "checkmark-circle" as const,
+            label: n,
+        };
     if (n.includes("pend"))
-        return { color: "#D97706", bg: "#FFFBEB", border: "#FDE68A", icon: "time-outline" as const };
+        return {
+            color: Colors.status.warning,
+            bg: Colors.status.warningBg,
+            border: Colors.status.warningBorder,
+            icon: "time" as const,
+            label: n,
+        };
     if (n.includes("cerr"))
-        return { color: "#6B7280", bg: "#F3F4F6", border: "#E5E7EB", icon: "lock-closed-outline" as const };
-    return { color: Colors.primary.main, bg: Colors.primary.soft, border: Colors.screen.border, icon: "ellipse-outline" as const };
+        return {
+            color: Colors.screen.textMuted,
+            bg: Colors.neutral[100],
+            border: Colors.screen.border,
+            icon: "lock-closed" as const,
+            label: n,
+        };
+    return {
+        color: Colors.primary.dark,
+        bg: Colors.primary.soft,
+        border: Colors.primary.muted,
+        icon: "ellipse" as const,
+        label: n,
+    };
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -32,14 +55,11 @@ interface IncidentCardProps {
     currentUserId?: number;
     onPress?: (item: Incident) => void;
     onEdit?: (item: Incident) => void;
-    onDelete?: (item: Incident) => void;
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export default function IncidentCard({ item, currentUserId, onPress, onEdit, onDelete }: IncidentCardProps) {
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-
+export default function IncidentCard({ item, currentUserId, onPress, onEdit }: IncidentCardProps) {
     const reportedBy = item.users
         ? `${item.users.name} ${item.users.ap}${item.users.am ? " " + item.users.am : ""}`.trim()
         : "—";
@@ -49,353 +69,276 @@ export default function IncidentCard({ item, currentUserId, onPress, onEdit, onD
     const isOwner = currentUserId !== undefined && item.usr_id === currentUserId;
 
     const isPending = (item.inc_status?.name ?? "").toLowerCase().includes("pend");
-    const ageMs = Date.now() - new Date(item.created_at).getTime();
-    const withinEditWindow = ageMs < 24 * 60 * 60 * 1000;   // 24 h — editar
-    const withinDeleteWindow = ageMs < 2 * 60 * 60 * 1000;  // 2 h  — eliminar
-
+    const withinEditWindow = Date.now() - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000;
     const showEditBtn = isOwner && onEdit && withinEditWindow && isPending;
-    const showDeleteBtn = isOwner && onDelete && withinDeleteWindow && isPending;
 
     const editedLabel = item.edited_at ? (() => {
         const { date: ed, time: et } = formatDateTime(item.edited_at);
         return `Editada · ${ed} ${et}`;
     })() : null;
 
+    const initials = reportedBy.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+
     return (
-        <>
-            <TouchableOpacity
-                style={styles.card}
-                activeOpacity={0.75}
-                onPress={() => onPress?.(item)}
-            >
-                {/* Barra lateral de color de estado */}
-                <View style={[styles.statusBar, { backgroundColor: ss.color }]} />
+        <TouchableOpacity
+            style={styles.card}
+            activeOpacity={0.82}
+            onPress={() => onPress?.(item)}
+        >
+            {/* Accent top bar */}
+            <View style={[styles.accentBar, { backgroundColor: ss.color }]} />
 
-                <View style={styles.inner}>
-                    {/* Fila superior */}
-                    <View style={styles.topRow}>
-                        <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>
-                                {reportedBy.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
-                            </Text>
+            <View style={styles.inner}>
+                {/* Header row */}
+                <View style={styles.headerRow}>
+                    {/* Avatar */}
+                    <View style={[styles.avatar, { backgroundColor: ss.bg, borderColor: ss.border }]}>
+                        <Text style={[styles.avatarText, { color: ss.color }]}>{initials}</Text>
+                    </View>
+
+                    {/* Info */}
+                    <View style={styles.headerMeta}>
+                        <Text style={styles.reportedBy} numberOfLines={1}>{reportedBy}</Text>
+                        <View style={styles.dateRow}>
+                            <Ionicons name="calendar-outline" size={10} color={Colors.screen.textMuted} />
+                            <Text style={styles.dateText}>{date} · {time}</Text>
                         </View>
-                        <View style={styles.reporterInfo}>
-                            <Text style={styles.reportedBy} numberOfLines={1}>{reportedBy}</Text>
-                            <View style={styles.metaRow}>
-                                <Text style={styles.metaText}>{date}</Text>
-                                <Text style={styles.metaDot}>·</Text>
-                                <Text style={styles.metaText}>{time}</Text>
-                            </View>
-                            {editedLabel && (
+                        {editedLabel && (
+                            <View style={styles.editedRow}>
+                                <Ionicons name="create-outline" size={10} color={Colors.primary.main} />
                                 <Text style={styles.editedText}>{editedLabel}</Text>
-                            )}
-                        </View>
-                        {/* Badge de estado */}
-                        <View style={[styles.statusBadge, { backgroundColor: ss.bg, borderColor: ss.border }]}>
-                            <Text style={[styles.statusText, { color: ss.color }]}>{statusName}</Text>
-                        </View>
-                    </View>
-
-                    <View style={styles.divider} />
-
-                    {/* Área y tipo */}
-                    <View style={styles.tagsRow}>
-                        <Text style={styles.tagText}>{item.areas?.name ?? "—"}</Text>
-                        <Text style={styles.tagSep}>·</Text>
-                        <Text style={styles.tagText}>{item.inc_types?.name ?? "—"}</Text>
-                    </View>
-
-                    {/* Descripción */}
-                    <Text style={styles.description} numberOfLines={3}>{item.description}</Text>
-
-                    {/* Imagen */}
-                    {item.image ? (
-                        <Image source={{ uri: item.image }} style={styles.image} resizeMode="cover" />
-                    ) : null}
-
-                    {/* Footer */}
-                    <View style={styles.footer}>
-                        <Text style={styles.costText}>${item.cost ?? 0}</Text>
-                        <View style={styles.footerRight}>
-                            {/* Botón eliminar — papelera minimalista */}
-                            {showDeleteBtn && (
-                                <TouchableOpacity
-                                    style={styles.deleteBtn}
-                                    onPress={(e) => { e.stopPropagation?.(); setShowDeleteModal(true); }}
-                                    activeOpacity={0.7}
-                                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                                >
-                                    <Ionicons name="trash-outline" size={14} color="#EF4444" />
-                                </TouchableOpacity>
-                            )}
-                            {showEditBtn && (
-                                <TouchableOpacity
-                                    style={styles.editBtn}
-                                    onPress={(e) => { e.stopPropagation?.(); onEdit!(item); }}
-                                    activeOpacity={0.75}
-                                >
-                                    <Ionicons name="pencil-outline" size={13} color={Colors.screen.textSecondary} />
-                                    <Text style={styles.editBtnText}>Editar</Text>
-                                </TouchableOpacity>
-                            )}
-                            <View style={styles.detailHint}>
-                                <Text style={styles.detailHintText}>Ver detalle</Text>
-                                <Ionicons name="chevron-forward" size={12} color={Colors.screen.textMuted} />
                             </View>
+                        )}
+                    </View>
+
+                    {/* Status badge */}
+                    <View style={[styles.statusBadge, { backgroundColor: ss.bg, borderColor: ss.border }]}>
+                        <Ionicons name={ss.icon} size={12} color={ss.color} />
+                        <Text style={[styles.statusText, { color: ss.color }]}>{statusName}</Text>
+                    </View>
+                </View>
+
+                {/* Classification chips */}
+                <View style={styles.chipsRow}>
+                    {item.areas?.name && (
+                        <View style={styles.chip}>
+                            <Ionicons name="location-outline" size={10} color={Colors.screen.textSecondary} />
+                            <Text style={styles.chipText}>{item.areas.name}</Text>
+                        </View>
+                    )}
+                    {item.inc_types?.name && (
+                        <View style={styles.chip}>
+                            <Ionicons name="pricetag-outline" size={10} color={Colors.screen.textSecondary} />
+                            <Text style={styles.chipText}>{item.inc_types.name}</Text>
+                        </View>
+                    )}
+                </View>
+
+                {/* Description */}
+                <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
+
+                {/* Image */}
+                {item.image ? (
+                    <Image source={{ uri: item.image }} style={styles.image} resizeMode="cover" />
+                ) : null}
+
+                {/* Footer */}
+                <View style={styles.footer}>
+                    <View style={styles.costPill}>
+                        <Ionicons name="cash-outline" size={12} color={Colors.screen.textMuted} />
+                        <Text style={styles.costText}>${item.cost ?? 0}</Text>
+                    </View>
+
+                    <View style={styles.footerRight}>
+                        {showEditBtn && (
+                            <TouchableOpacity
+                                style={styles.editBtn}
+                                onPress={(e) => { e.stopPropagation?.(); onEdit!(item); }}
+                                activeOpacity={0.75}
+                            >
+                                <Ionicons name="pencil" size={12} color={Colors.primary.dark} />
+                                <Text style={styles.editBtnText}>Editar</Text>
+                            </TouchableOpacity>
+                        )}
+                        <View style={styles.detailHint}>
+                            <Text style={styles.detailHintText}>Ver detalle</Text>
+                            <Ionicons name="chevron-forward" size={12} color={Colors.primary.main} />
                         </View>
                     </View>
                 </View>
-            </TouchableOpacity>
-
-            {/* Modal de confirmación de eliminación */}
-            <Modal
-                visible={showDeleteModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowDeleteModal(false)}
-            >
-                <View style={modal.overlay}>
-                    <View style={modal.sheet}>
-                        {/* Ícono */}
-                        <View style={modal.iconWrap}>
-                            <Ionicons name="trash-outline" size={28} color="#EF4444" />
-                        </View>
-
-                        <Text style={modal.title}>¿Eliminar incidencia?</Text>
-                        <Text style={modal.body}>
-                            Esta acción no se puede deshacer. La incidencia será eliminada permanentemente.
-                        </Text>
-
-                        <View style={modal.actions}>
-                            <TouchableOpacity
-                                style={[modal.btn, modal.btnCancel]}
-                                onPress={() => setShowDeleteModal(false)}
-                            >
-                                <Text style={modal.btnCancelText}>Cancelar</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[modal.btn, modal.btnDelete]}
-                                onPress={() => {
-                                    setShowDeleteModal(false);
-                                    onDelete?.(item);
-                                }}
-                            >
-                                <Ionicons name="trash-outline" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-                                <Text style={modal.btnDeleteText}>Eliminar</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-        </>
+            </View>
+        </TouchableOpacity>
     );
 }
 
 // ── Estilos ───────────────────────────────────────────────────────────────────
 
-const modal = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        backgroundColor: "rgba(0,0,0,0.45)",
-        justifyContent: "center",
-        alignItems: "center",
-        paddingHorizontal: 28,
-    },
-    sheet: {
-        width: "100%",
-        backgroundColor: Colors.screen.card,
-        borderRadius: 20,
-        padding: 24,
-        alignItems: "center",
-        gap: 12,
-        borderWidth: 1,
-        borderColor: Colors.screen.border,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.14,
-        shadowRadius: 24,
-        elevation: 12,
-    },
-    iconWrap: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: "#FEF2F2",
-        borderWidth: 1.5,
-        borderColor: "#FECACA",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 2,
-    },
-    title: {
-        fontFamily: "Outfit_700Bold",
-        fontSize: 18,
-        color: Colors.screen.textPrimary,
-        textAlign: "center",
-    },
-    body: {
-        fontFamily: "Outfit_400Regular",
-        fontSize: 13,
-        color: Colors.screen.textSecondary,
-        textAlign: "center",
-        lineHeight: 20,
-    },
-    actions: {
-        flexDirection: "row",
-        gap: 10,
-        width: "100%",
-        marginTop: 4,
-    },
-    btn: {
-        flex: 1,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 13,
-        borderRadius: 12,
-    },
-    btnCancel: {
-        backgroundColor: Colors.screen.bg,
-        borderWidth: 1,
-        borderColor: Colors.screen.border,
-    },
-    btnDelete: {
-        backgroundColor: "#EF4444",
-    },
-    btnCancelText: {
-        fontFamily: "Outfit_600SemiBold",
-        fontSize: 14,
-        color: Colors.screen.textSecondary,
-    },
-    btnDeleteText: {
-        fontFamily: "Outfit_700Bold",
-        fontSize: 14,
-        color: "#FFFFFF",
-    },
-});
-
 const styles = StyleSheet.create({
     card: {
-        flexDirection: "row",
         backgroundColor: Colors.screen.card,
-        borderRadius: 14,
+        borderRadius: 16,
         borderWidth: 1,
         borderColor: Colors.screen.border,
-        marginBottom: 10,
+        marginBottom: 12,
         overflow: "hidden",
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 4,
-        elevation: 1,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
     },
-    statusBar: { width: 3 },
-    inner: { flex: 1, padding: 14 },
+    accentBar: {
+        height: 3,
+        width: "100%",
+    },
+    inner: {
+        padding: 14,
+        gap: 10,
+    },
 
-    topRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+    // Header
+    headerRow: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: 10,
+    },
     avatar: {
-        width: 34, height: 34, borderRadius: 17,
-        backgroundColor: Colors.screen.bg,
-        borderWidth: 1, borderColor: Colors.screen.border,
-        alignItems: "center", justifyContent: "center", flexShrink: 0,
+        width: 38,
+        height: 38,
+        borderRadius: 12,
+        borderWidth: 1.5,
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
     },
     avatarText: {
-        fontFamily: "Outfit_600SemiBold",
-        fontSize: 12,
-        color: Colors.screen.textSecondary,
+        fontFamily: "Outfit_700Bold",
+        fontSize: 13,
+        letterSpacing: 0.5,
     },
-    reporterInfo: { flex: 1, gap: 2 },
+    headerMeta: {
+        flex: 1,
+        gap: 3,
+    },
     reportedBy: {
         fontFamily: "Outfit_600SemiBold",
         fontSize: 14,
         color: Colors.screen.textPrimary,
+        lineHeight: 18,
     },
-    metaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-    metaText: {
+    dateRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    dateText: {
         fontFamily: "Outfit_400Regular",
         fontSize: 11,
         color: Colors.screen.textMuted,
     },
-    metaDot: { fontSize: 11, color: Colors.screen.border },
+    editedRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 3,
+    },
     editedText: {
         fontFamily: "Outfit_400Regular",
         fontSize: 10,
-        color: Colors.screen.textMuted,
-        marginTop: 1,
+        color: Colors.primary.main,
     },
-
     statusBadge: {
-        borderWidth: 1,
-        borderRadius: 20,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
         paddingHorizontal: 8,
         paddingVertical: 4,
+        borderRadius: 20,
+        borderWidth: 1,
         flexShrink: 0,
     },
-    statusText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
+    statusText: {
+        fontFamily: "Outfit_600SemiBold",
+        fontSize: 10,
+        letterSpacing: 0.2,
+    },
 
-    divider: { height: 1, backgroundColor: Colors.screen.border, marginBottom: 10 },
-
-    tagsRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
-    tagText: {
+    // Chips
+    chipsRow: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 6,
+    },
+    chip: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        backgroundColor: Colors.neutral[100],
+        borderRadius: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderWidth: 1,
+        borderColor: Colors.screen.border,
+    },
+    chipText: {
         fontFamily: "Outfit_500Medium",
-        fontSize: 12,
+        fontSize: 11,
         color: Colors.screen.textSecondary,
     },
-    tagSep: { fontSize: 12, color: Colors.screen.border },
 
+    // Description
     description: {
         fontFamily: "Outfit_400Regular",
         fontSize: 13,
         color: Colors.screen.textSecondary,
-        lineHeight: 20,
-        marginBottom: 10,
+        lineHeight: 19,
     },
-    image: { width: "100%", height: 160, borderRadius: 10, marginBottom: 10 },
 
+    // Image
+    image: {
+        width: "100%",
+        height: 160,
+        borderRadius: 10,
+    },
+
+    // Footer
     footer: {
         flexDirection: "row",
         alignItems: "center",
+        paddingTop: 10,
         borderTopWidth: 1,
         borderTopColor: Colors.screen.border,
-        paddingTop: 8,
+    },
+    costPill: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        flex: 1,
     },
     costText: {
         fontFamily: "Outfit_500Medium",
         fontSize: 12,
         color: Colors.screen.textMuted,
-        flex: 1,
     },
     footerRight: {
         flexDirection: "row",
         alignItems: "center",
         gap: 8,
     },
-    // Papelera — minimalista, solo ícono con borde suave
-    deleteBtn: {
-        width: 28,
-        height: 28,
-        borderRadius: 8,
-        backgroundColor: "#FEF2F2",
-        borderWidth: 1,
-        borderColor: "#FECACA",
-        alignItems: "center",
-        justifyContent: "center",
-    },
     editBtn: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 4,
+        gap: 5,
         paddingHorizontal: 10,
         paddingVertical: 5,
         borderRadius: 8,
-        backgroundColor: Colors.screen.bg,
+        backgroundColor: Colors.primary.soft,
         borderWidth: 1,
-        borderColor: Colors.screen.border,
+        borderColor: Colors.primary.muted,
     },
     editBtnText: {
-        fontFamily: "Outfit_500Medium",
+        fontFamily: "Outfit_600SemiBold",
         fontSize: 12,
-        color: Colors.screen.textSecondary,
+        color: Colors.primary.dark,
     },
     detailHint: {
         flexDirection: "row",
@@ -403,8 +346,8 @@ const styles = StyleSheet.create({
         gap: 2,
     },
     detailHintText: {
-        fontFamily: "Outfit_400Regular",
+        fontFamily: "Outfit_500Medium",
         fontSize: 11,
-        color: Colors.screen.textMuted,
+        color: Colors.primary.main,
     },
 });

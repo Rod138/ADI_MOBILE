@@ -5,7 +5,6 @@ import { StyleSheet, View, ViewStyle } from "react-native";
 interface SectionCardProps {
     children: React.ReactNode;
     theme?: "dark" | "light";
-    /** Línea shimmer en el top — solo relevante en dark. Default: true */
     shimmer?: boolean;
     padding?: number;
     paddingTop?: number;
@@ -40,12 +39,12 @@ const styles = StyleSheet.create({
         overflow: "hidden",
         backgroundColor: "rgba(255,255,255,0.07)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.11)",
+        borderColor: "rgba(255,255,255,0.10)",
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 20 },
-        shadowOpacity: 0.45,
-        shadowRadius: 32,
-        elevation: 20,
+        shadowOpacity: 0.40,
+        shadowRadius: 28,
+        elevation: 18,
     },
     cardLight: {
         borderRadius: 16,
@@ -53,15 +52,15 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.screen.card,
         borderWidth: 1,
         borderColor: Colors.screen.border,
-        shadowColor: "#1E2D4A",
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
+        shadowOpacity: 0.05,
         shadowRadius: 8,
         elevation: 2,
     },
     shimmer: {
         height: 1,
-        backgroundColor: "rgba(255,255,255,0.15)",
+        backgroundColor: "rgba(255,255,255,0.14)",
     },
     content: {
         gap: 0,

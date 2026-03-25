@@ -158,7 +158,7 @@ export default function CreateIncidentScreen() {
                     {/* Header */}
                     <View style={styles.pageHeader}>
                         <Text style={styles.pageTitle}>Crear Incidencia</Text>
-                        <Text style={styles.pageSubtitle}>Reporta un problema en tu condominio</Text>
+                        <Text style={styles.pageSubtitle}>Reporta un problema en la torre</Text>
                     </View>
 
                     <SectionCard theme="light" padding={20} paddingTop={20}>
