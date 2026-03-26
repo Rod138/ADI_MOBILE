@@ -17,7 +17,7 @@ export default function Index() {
 
       if (token) {
         //  Hay sesión guardada : ir al home
-        router.replace("/(tabs)" as any);
+        router.replace("/(tabs)/home" as any);
       } else {
         //  No hay sesión : ir al login
         router.replace("/login");

@@ -10,11 +10,11 @@ export default function TabsLayout() {
                 screenOptions={{
                     headerShown: false,
                     tabBarStyle: {
-                        backgroundColor: Colors.screen.bg,
+                        backgroundColor: Colors.screen.card,
                         borderTopColor: Colors.screen.border,
                         borderTopWidth: 1,
-                        height: 64,
-                        paddingBottom: 10,
+                        height: 68,
+                        paddingBottom: 12,
                         paddingTop: 8,
                     },
                     tabBarActiveTintColor: Colors.primary.main,
@@ -22,25 +22,25 @@ export default function TabsLayout() {
                     tabBarLabelStyle: {
                         fontFamily: "Outfit_500Medium",
                         fontSize: 10,
-                        letterSpacing: 0.5,
+                        letterSpacing: 0.4,
                     },
                 }}
             >
                 <Tabs.Screen
-                    name="index"
+                    name="home"
                     options={{
-                        title: "Incidencias",
+                        title: "Inicio",
                         tabBarIcon: ({ color, size }) => (
-                            <Ionicons name="list-outline" size={size} color={color} />
+                            <Ionicons name="grid-outline" size={size} color={color} />
                         ),
                     }}
                 />
                 <Tabs.Screen
-                    name="create"
+                    name="notifications"
                     options={{
-                        title: "Reportar",
-                        tabBarIcon: ({ color }) => (
-                            <Ionicons name="add-circle-outline" size={28} color={color} />
+                        title: "Avisos",
+                        tabBarIcon: ({ color, size }) => (
+                            <Ionicons name="notifications-outline" size={size} color={color} />
                         ),
                     }}
                 />
@@ -53,27 +53,9 @@ export default function TabsLayout() {
                         ),
                     }}
                 />
-                {/* Ocultas de la tab bar — solo accesibles por navegación */}
-                <Tabs.Screen
-                    name="notifications"
-                    options={{ href: null }}
-                />
-                <Tabs.Screen
-                    name="change-password"
-                    options={{ href: null }}
-                />
-                <Tabs.Screen
-                    name="change-phone"
-                    options={{ href: null }}
-                />
-                <Tabs.Screen
-                    name="edit-incident"
-                    options={{ href: null }}
-                />
-                <Tabs.Screen
-                    name="incident-detail"
-                    options={{ href: null }}
-                />
+                {/* Páginas ocultas de la tab bar */}
+                <Tabs.Screen name="change-password" options={{ href: null }} />
+                <Tabs.Screen name="change-phone" options={{ href: null }} />
             </Tabs>
         </AuthProvider>
     );

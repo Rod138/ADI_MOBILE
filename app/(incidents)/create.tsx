@@ -294,7 +294,7 @@ export default function CreateIncidentScreen() {
                         <Text style={modal.body}>La incidencia fue reportada con éxito. El equipo de administración la revisará pronto.</Text>
                         <TouchableOpacity
                             style={[modal.btn, modal.btnConfirm, { width: "100%" }]}
-                            onPress={() => { setShowSuccess(false); router.replace("/(tabs)" as any); }}
+                            onPress={() => { setShowSuccess(false); router.replace("/(tabs)/home" as any); }}
                         >
                             <Text style={modal.btnConfirmText}>Ver incidencias</Text>
                         </TouchableOpacity>

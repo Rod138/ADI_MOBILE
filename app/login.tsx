@@ -56,7 +56,7 @@ export default function LoginScreen() {
         setFieldErrors(errors);
         if (!isFormValid(errors)) return;
         const result = await login({ email: email.trim().toLowerCase(), password });
-        if (result) router.replace("/(tabs)" as any);
+        if (result) router.replace("/(tabs)/home" as any);
     };
 
     const handleForgotPassword = () => {
