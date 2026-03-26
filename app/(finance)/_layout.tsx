@@ -4,6 +4,7 @@ export default function FinanceLayout() {
     return (
         <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
+            <Stack.Screen name="recipes" />
         </Stack>
     );
 }

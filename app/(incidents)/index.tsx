@@ -67,13 +67,6 @@ export default function IncidentsScreen() {
                     </View>
                     <View style={styles.headerRight}>
                         <TouchableOpacity
-                            style={styles.headerBtn}
-                            onPress={() => router.push("/(incidents)/create" as any)}
-                            activeOpacity={0.7}
-                        >
-                            <Ionicons name="add" size={20} color="rgba(255,255,255,0.85)" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
                             style={[styles.headerBtn, activeAreaId !== undefined && styles.headerBtnActive]}
                             onPress={openDrawer}
                             activeOpacity={0.7}
@@ -137,16 +130,6 @@ export default function IncidentsScreen() {
                             <Text style={styles.filterChipText}>{activeAreaName}</Text>
                             <Ionicons name="close" size={12} color={Colors.primary.dark} />
                         </TouchableOpacity>
-                    </View>
-                )}
-
-                {/* Results count */}
-                {!isLoading && !error && (
-                    <View style={styles.resultsBar}>
-                        <Text style={styles.resultsText}>
-                            <Text style={styles.resultsCount}>{incidents.length}</Text>
-                            {" "}{incidents.length === 1 ? "incidencia" : "incidencias"}
-                        </Text>
                     </View>
                 )}
 
@@ -356,8 +339,7 @@ const styles = StyleSheet.create({
     // States
     centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
     stateCard: {
-        backgroundColor: Colors.screen.card, borderRadius: 20, padding: 28,
-        alignItems: "center", gap: 10, borderWidth: 1, borderColor: Colors.screen.border,
+        alignItems: "center", gap: 10,
         width: "100%", maxWidth: 280,
     },
     stateIcon: {
