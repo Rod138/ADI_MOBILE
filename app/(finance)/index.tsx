@@ -169,6 +169,19 @@ export default function FinanceScreen() {
                         />
                     )}
 
+                    {canManageExpenses && (
+                        <ModuleCard
+                            icon="people-outline"
+                            title="Cuotas de residentes"
+                            description="Revisa y valida los comprobantes de pago de cuota mensual de todos los residentes."
+                            accentColor={Colors.primary.main}
+                            accentBg={Colors.primary.soft}
+                            accentBorder={Colors.primary.muted}
+                            roleTag="Admin / Tesorero"
+                            onPress={() => router.push("/(finance)/admin-recipes" as any)}
+                        />
+                    )}
+
                     {/* ── EN DESARROLLO ────────────────────────────────── */}
                     <View style={styles.sectionLabel}>
                         <Text style={styles.sectionLabelText}>EN DESARROLLO</Text>
