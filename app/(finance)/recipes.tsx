@@ -1,9 +1,11 @@
+import InputField from "@/components/InputField";
 import PrimaryButton from "@/components/PrimaryButton";
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
 import { MONTH_ORDER, MONTHS, useRecipes, type Recipe } from "@/hooks/useRecipes";
-import { uploadImage } from "@/lib/cloudinary";
+import { uploadFile } from "@/lib/cloudinary";
 import { Ionicons } from "@expo/vector-icons";
+import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -12,6 +14,7 @@ import {
     Alert,
     Animated,
     Image,
+    Linking,
     Modal,
     ScrollView,
     StatusBar,
@@ -33,24 +36,29 @@ function getValidationStyle(validated: boolean | null) {
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
-const YEARS = [CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
+const YEARS = [CURRENT_YEAR];
+
+// ── Tipo de archivo adjunto ───────────────────────────────────────────────────
+
+interface AttachedFile {
+    uri: string;
+    name: string;
+    type: "image" | "pdf";
+}
 
 // ── Receipt Card ──────────────────────────────────────────────────────────────
 
 function ReceiptCard({
     item,
-    isAdmin,
-    onValidate,
     onDelete,
     onViewImage,
 }: {
     item: Recipe;
-    isAdmin: boolean;
-    onValidate?: (id: number, val: boolean) => void;
     onDelete?: (id: number) => void;
     onViewImage: (url: string) => void;
 }) {
     const vs = getValidationStyle(item.validated ?? null);
+    const isPdf = item.img?.toLowerCase().includes(".pdf") || item.img?.includes("/raw/");
 
     return (
         <View style={card.root}>
@@ -58,11 +66,21 @@ function ReceiptCard({
             <View style={card.inner}>
                 {/* Header */}
                 <View style={card.header}>
-                    <View style={[card.monthBadge, { backgroundColor: vs.bg, borderColor: vs.border }]}>
-                        <Ionicons name="calendar" size={14} color={vs.color} />
-                        <Text style={[card.monthText, { color: vs.color }]}>
-                            {item.month} {item.year}
-                        </Text>
+                    <View style={{ flexDirection: "row", gap: 6, flex: 1, flexWrap: "wrap" }}>
+                        <View style={[card.monthBadge, { backgroundColor: vs.bg, borderColor: vs.border }]}>
+                            <Ionicons name="calendar" size={14} color={vs.color} />
+                            <Text style={[card.monthText, { color: vs.color }]}>
+                                {item.month} {item.year}
+                            </Text>
+                        </View>
+                        {item.amount != null && (
+                            <View style={[card.monthBadge, { backgroundColor: Colors.screen.bg, borderColor: Colors.screen.border }]}>
+                                <Ionicons name="cash-outline" size={14} color={Colors.screen.textSecondary} />
+                                <Text style={[card.monthText, { color: Colors.screen.textSecondary }]}>
+                                    ${Number(item.amount).toFixed(2)}
+                                </Text>
+                            </View>
+                        )}
                     </View>
                     <View style={[card.statusBadge, { backgroundColor: vs.bg, borderColor: vs.border }]}>
                         <Ionicons name={vs.icon} size={12} color={vs.color} />
@@ -70,15 +88,34 @@ function ReceiptCard({
                     </View>
                 </View>
 
-                {/* Image preview */}
+                {/* Archivo adjunto */}
                 {item.img ? (
-                    <TouchableOpacity activeOpacity={0.85} onPress={() => onViewImage(item.img!)}>
-                        <Image source={{ uri: item.img }} style={card.img} resizeMode="cover" />
-                        <View style={card.imgOverlay}>
-                            <Ionicons name="expand-outline" size={18} color="#fff" />
-                            <Text style={card.imgOverlayText}>Ver comprobante</Text>
-                        </View>
-                    </TouchableOpacity>
+                    isPdf ? (
+                        // Vista para PDF
+                        <TouchableOpacity
+                            style={card.pdfPreview}
+                            activeOpacity={0.85}
+                            onPress={() => Linking.openURL(item.img!)}
+                        >
+                            <View style={card.pdfIcon}>
+                                <Ionicons name="document-text" size={28} color={Colors.status.error} />
+                            </View>
+                            <View style={card.pdfInfo}>
+                                <Text style={card.pdfLabel}>Comprobante PDF</Text>
+                                <Text style={card.pdfHint}>Toca para abrir</Text>
+                            </View>
+                            <Ionicons name="open-outline" size={18} color={Colors.screen.textMuted} />
+                        </TouchableOpacity>
+                    ) : (
+                        // Vista para imagen
+                        <TouchableOpacity activeOpacity={0.85} onPress={() => onViewImage(item.img!)}>
+                            <Image source={{ uri: item.img }} style={card.img} resizeMode="cover" />
+                            <View style={card.imgOverlay}>
+                                <Ionicons name="expand-outline" size={18} color="#fff" />
+                                <Text style={card.imgOverlayText}>Ver comprobante</Text>
+                            </View>
+                        </TouchableOpacity>
+                    )
                 ) : (
                     <View style={card.noImg}>
                         <Ionicons name="document-outline" size={20} color={Colors.screen.textMuted} />
@@ -86,27 +123,6 @@ function ReceiptCard({
                     </View>
                 )}
 
-                {/* Admin actions */}
-                {isAdmin && item.validated === null && (
-                    <View style={card.adminActions}>
-                        <TouchableOpacity
-                            style={[card.actionBtn, card.actionBtnApprove]}
-                            onPress={() => onValidate?.(item.id, true)}
-                            activeOpacity={0.8}
-                        >
-                            <Ionicons name="checkmark" size={15} color={Colors.status.success} />
-                            <Text style={[card.actionBtnText, { color: Colors.status.success }]}>Aprobar</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[card.actionBtn, card.actionBtnReject]}
-                            onPress={() => onValidate?.(item.id, false)}
-                            activeOpacity={0.8}
-                        >
-                            <Ionicons name="close" size={15} color={Colors.status.error} />
-                            <Text style={[card.actionBtnText, { color: Colors.status.error }]}>Rechazar</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
 
                 {/* Delete (owner or admin) */}
                 {onDelete && item.validated !== true && (
@@ -157,7 +173,6 @@ function MonthPicker({ value, year, onSelectMonth, onSelectYear, error }: {
                         <View style={mp.handle} />
                         <Text style={mp.sheetTitle}>Selecciona período</Text>
 
-                        {/* Year selector */}
                         <View style={mp.yearRow}>
                             {YEARS.map(y => (
                                 <TouchableOpacity
@@ -171,7 +186,6 @@ function MonthPicker({ value, year, onSelectMonth, onSelectYear, error }: {
                             ))}
                         </View>
 
-                        {/* Month grid */}
                         <View style={mp.monthGrid}>
                             {MONTHS.map(m => (
                                 <TouchableOpacity
@@ -226,61 +240,147 @@ function UploadForm({
     const { createRecipe, isLoading } = useRecipes();
     const [month, setMonth] = useState("");
     const [year, setYear] = useState(CURRENT_YEAR);
-    const [imageUri, setImageUri] = useState<string | null>(null);
+    const [amount, setAmount] = useState("");
+    const [file, setFile] = useState<AttachedFile | null>(null);
     const [uploading, setUploading] = useState(false);
-    const [errors, setErrors] = useState<{ month?: string; image?: string }>({});
+    const [errors, setErrors] = useState<{ month?: string; file?: string; amount?: string }>({});
+
+    // ── Opciones de adjunto ────────────────────────────────────────────────
 
     const pickImage = async () => {
         const p = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!p.granted) { Alert.alert("Permiso requerido", "Necesitamos acceso a tu galería."); return; }
-        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [3, 4], quality: 0.85 });
-        if (!r.canceled && r.assets[0]) setImageUri(r.assets[0].uri);
+        if (!p.granted) {
+            Alert.alert("Permiso requerido", "Necesitamos acceso a tu galería.");
+            return;
+        }
+        const r = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [3, 4],
+            quality: 0.85,
+        });
+        if (!r.canceled && r.assets[0]) {
+            const asset = r.assets[0];
+            const name = asset.uri.split("/").pop() ?? "imagen.jpg";
+            setFile({ uri: asset.uri, name, type: "image" });
+            setErrors(p => ({ ...p, file: undefined }));
+        }
     };
 
     const takePhoto = async () => {
         const p = await ImagePicker.requestCameraPermissionsAsync();
-        if (!p.granted) { Alert.alert("Permiso requerido", "Necesitamos acceso a tu cámara."); return; }
-        const r = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [3, 4], quality: 0.85 });
-        if (!r.canceled && r.assets[0]) setImageUri(r.assets[0].uri);
+        if (!p.granted) {
+            Alert.alert("Permiso requerido", "Necesitamos acceso a tu cámara.");
+            return;
+        }
+        const r = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [3, 4],
+            quality: 0.85,
+        });
+        if (!r.canceled && r.assets[0]) {
+            const asset = r.assets[0];
+            const name = asset.uri.split("/").pop() ?? "foto.jpg";
+            setFile({ uri: asset.uri, name, type: "image" });
+            setErrors(p => ({ ...p, file: undefined }));
+        }
     };
 
-    const showImageOptions = () => Alert.alert("Adjuntar comprobante", "¿Cómo deseas agregar la imagen?", [
-        { text: "Cámara", onPress: takePhoto },
-        { text: "Galería", onPress: pickImage },
-        { text: "Cancelar", style: "cancel" },
-    ]);
+    const pickPdf = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: "application/pdf",
+                copyToCacheDirectory: true,
+            });
+
+            // expo-document-picker v12+: result.canceled, result.assets[]
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const asset = result.assets[0];
+                setFile({ uri: asset.uri, name: asset.name ?? "comprobante.pdf", type: "pdf" });
+                setErrors(p => ({ ...p, file: undefined }));
+            }
+        } catch {
+            Alert.alert("Error", "No se pudo seleccionar el PDF.");
+        }
+    };
+
+    const showFileOptions = () =>
+        Alert.alert("Adjuntar comprobante", "¿Cómo deseas agregar el comprobante?", [
+            { text: "📷 Cámara", onPress: takePhoto },
+            { text: "🖼️  Galería", onPress: pickImage },
+            { text: "📄 PDF", onPress: pickPdf },
+            { text: "Cancelar", style: "cancel" },
+        ]);
+
+    // ── Validación ─────────────────────────────────────────────────────────
 
     const validate = () => {
         const e: typeof errors = {};
-        if (!month) e.month = "Selecciona el mes de la cuota.";
-        else if (existingMonths.has(`${month}-${year}`)) e.month = "Ya existe un comprobante para ese mes y año.";
-        if (!imageUri) e.image = "Adjunta la imagen del comprobante.";
+        if (!month)
+            e.month = "Selecciona el mes de la cuota.";
+        else if (existingMonths.has(`${month}-${year}`))
+            e.month = "Ya existe un comprobante para ese mes y año.";
+
+        if (!amount.trim()) {
+            e.amount = "Introduce el monto de la cuota.";
+        } else {
+            const parsed = parseInt(amount, 10);
+            if (isNaN(parsed) || parsed <= 0) {
+                e.amount = "El monto debe ser numérico y mayor a 0.";
+            } else if (amount.length > 4) {
+                e.amount = "Máximo 4 dígitos.";
+            }
+        }
+
+        if (!file)
+            e.file = "Adjunta el comprobante (imagen o PDF).";
         setErrors(e);
         return Object.keys(e).length === 0;
     };
 
+    // ── Envío ──────────────────────────────────────────────────────────────
+
     const handleSubmit = async () => {
         if (!validate()) return;
+
         setUploading(true);
-        let imageUrl: string | null = null;
+        let fileUrl: string | null = null;
+
         try {
-            imageUrl = (await uploadImage(imageUri!, "comprobantes")).url;
-        } catch {
-            Alert.alert("Error", "No se pudo subir la imagen. Intenta de nuevo.");
+            fileUrl = (await uploadFile(file!.uri, "comprobantes")).url;
+        } catch (err: any) {
+            console.error("Error upload:", err?.message);
+            Alert.alert("Error al subir", err?.message ?? "No se pudo subir el archivo. Intenta de nuevo.");
             setUploading(false);
             return;
-        } finally {
-            setUploading(false);
         }
 
-        const ok = await createRecipe({ year, month, img: imageUrl, usr_id: userId, validated: false });
+        setUploading(false);
+
+        const parsedAmount = parseFloat(amount.replace(/,/g, ""));
+
+        // Guardamos con estado null como pendiente (la bd ya permite nulos)
+        const ok = await createRecipe({
+            year,
+            month,
+            img: fileUrl,
+            usr_id: userId,
+            validated: null,
+            amount: parsedAmount,
+        });
+
         if (ok) {
-            setMonth(""); setImageUri(null); setErrors({});
+            setMonth("");
+            setAmount("");
+            setFile(null);
+            setErrors({});
             onSuccess();
         } else {
-            Alert.alert("Error", "No se pudo guardar el comprobante.");
+            Alert.alert("Error", "No se pudo guardar el comprobante. Intenta de nuevo.");
         }
     };
+
+    // ── Render ─────────────────────────────────────────────────────────────
 
     return (
         <View style={form.root}>
@@ -294,6 +394,7 @@ function UploadForm({
                 </View>
             </View>
 
+            {/* Mes y año */}
             <MonthPicker
                 value={month}
                 year={year}
@@ -302,45 +403,92 @@ function UploadForm({
                 error={errors.month}
             />
 
-            {/* Image picker */}
+            {/* Monto */}
+            <View style={form.field}>
+                <InputField
+                    label="MONTO DE LA CUOTA"
+                    placeholder="Ej. 1500"
+                    keyboardType="numeric"
+                    leftIcon="cash-outline"
+                    maxLength={4}
+                    value={amount}
+                    onChangeText={(val) => { 
+                        setAmount(val.replace(/[^0-9]/g, "")); 
+                        setErrors(p => ({ ...p, amount: undefined })); 
+                    }}
+                    error={errors.amount}
+                />
+            </View>
+
+            {/* Adjunto */}
             <View style={form.field}>
                 <Text style={form.fieldLabel}>COMPROBANTE</Text>
-                {imageUri ? (
+
+                {file ? (
                     <View>
-                        <Image source={{ uri: imageUri }} style={form.imgPreview} resizeMode="cover" />
+                        {file.type === "image" ? (
+                            <Image source={{ uri: file.uri }} style={form.imgPreview} resizeMode="cover" />
+                        ) : (
+                            // Previsualización PDF
+                            <View style={form.pdfPreview}>
+                                <Ionicons name="document-text" size={36} color={Colors.status.error} />
+                                <View style={{ flex: 1 }}>
+                                    <Text style={form.pdfName} numberOfLines={1}>{file.name}</Text>
+                                    <Text style={form.pdfHint}>PDF seleccionado</Text>
+                                </View>
+                            </View>
+                        )}
+
                         <View style={form.imgActions}>
-                            <TouchableOpacity style={form.imgBtn} onPress={showImageOptions}>
-                                <Ionicons name="camera-outline" size={14} color={Colors.primary.main} />
-                                <Text style={form.imgBtnText}>Cambiar</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[form.imgBtn, form.imgBtnDanger]} onPress={() => setImageUri(null)}>
+                            <TouchableOpacity
+                                style={[form.imgBtn, form.imgBtnDanger]}
+                                onPress={() => setFile(null)}
+                            >
                                 <Ionicons name="trash-outline" size={14} color={Colors.status.error} />
                                 <Text style={[form.imgBtnText, { color: Colors.status.error }]}>Quitar</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
                 ) : (
-                    <TouchableOpacity style={[form.imgPicker, errors.image && form.imgPickerError]} onPress={showImageOptions} activeOpacity={0.8}>
-                        <Ionicons name="receipt-outline" size={30} color={errors.image ? Colors.status.error : Colors.screen.iconMuted} />
-                        <Text style={[form.imgPickerText, errors.image && { color: Colors.status.error }]}>Toca para adjuntar el comprobante</Text>
-                        <Text style={form.imgPickerHint}>Foto del recibo o transferencia</Text>
+                    <TouchableOpacity
+                        style={[form.imgPicker, errors.file && form.imgPickerError]}
+                        onPress={showFileOptions}
+                        activeOpacity={0.8}
+                    >
+                        <Ionicons
+                            name="attach-outline"
+                            size={30}
+                            color={errors.file ? Colors.status.error : Colors.screen.iconMuted}
+                        />
+                        <Text style={[form.imgPickerText, errors.file && { color: Colors.status.error }]}>
+                            Toca para adjuntar el comprobante
+                        </Text>
+                        <Text style={form.imgPickerHint}>Imagen (JPG/PNG) o PDF</Text>
                     </TouchableOpacity>
                 )}
-                {errors.image && (
+
+                {errors.file && (
                     <View style={form.errorRow}>
                         <Ionicons name="alert-circle-outline" size={12} color={Colors.status.error} />
-                        <Text style={form.errorText}>{errors.image}</Text>
+                        <Text style={form.errorText}>{errors.file}</Text>
                     </View>
                 )}
             </View>
 
+            {/* Botón / loader */}
             {uploading || isLoading ? (
                 <View style={form.loadingRow}>
                     <ActivityIndicator size="small" color={Colors.primary.light} />
-                    <Text style={form.loadingText}>{uploading ? "Subiendo imagen..." : "Guardando..."}</Text>
+                    <Text style={form.loadingText}>
+                        {uploading ? "Subiendo archivo..." : "Guardando..."}
+                    </Text>
                 </View>
             ) : (
-                <PrimaryButton label="Enviar comprobante" onPress={handleSubmit} disabled={isLoading || uploading} />
+                <PrimaryButton
+                    label="Enviar comprobante"
+                    onPress={handleSubmit}
+                    disabled={isLoading || uploading}
+                />
             )}
         </View>
     );
@@ -350,13 +498,10 @@ function UploadForm({
 
 export default function RecipesScreen() {
     const { user } = useSession();
-    const { recipes, isLoading, error, fetchMyRecipes, validateRecipe, deleteRecipe } = useRecipes();
+    const { recipes, isLoading, error, fetchMyRecipes, deleteRecipe } = useRecipes();
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [showForm, setShowForm] = useState(false);
     const formHeight = useRef(new Animated.Value(0)).current;
-
-    // Admins (rol 3 y 4) y Tesoreros (rol 2) ven todos
-    const isAdmin = (user?.rol_id ?? 0) >= 2;
 
     useEffect(() => {
         if (user) fetchMyRecipes(user.id);
@@ -364,7 +509,8 @@ export default function RecipesScreen() {
 
     const toggleForm = () => {
         if (showForm) {
-            Animated.timing(formHeight, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => setShowForm(false));
+            Animated.timing(formHeight, { toValue: 0, duration: 250, useNativeDriver: false })
+                .start(() => setShowForm(false));
         } else {
             setShowForm(true);
             Animated.timing(formHeight, { toValue: 1, duration: 300, useNativeDriver: false }).start();
@@ -385,20 +531,15 @@ export default function RecipesScreen() {
                 onPress: async () => {
                     await deleteRecipe(id);
                     if (user) fetchMyRecipes(user.id);
-                }
+                },
             },
         ]);
     };
 
-    const handleValidate = async (id: number, val: boolean) => {
-        await validateRecipe(id, val);
-        if (user) fetchMyRecipes(user.id);
-    };
 
-    // Meses que ya tienen comprobante (para evitar duplicados)
+
     const existingMonths = new Set(recipes.map(r => `${r.month}-${r.year}`));
 
-    // Ordenar por año desc, luego por mes desc
     const sorted = [...recipes].sort((a, b) => {
         if (a.year !== b.year) return b.year - a.year;
         return (MONTH_ORDER[b.month] ?? 0) - (MONTH_ORDER[a.month] ?? 0);
@@ -429,7 +570,11 @@ export default function RecipesScreen() {
                         onPress={toggleForm}
                         activeOpacity={0.8}
                     >
-                        <Ionicons name={showForm ? "close" : "add"} size={18} color={showForm ? Colors.status.error : Colors.primary.dark} />
+                        <Ionicons
+                            name={showForm ? "close" : "add"}
+                            size={18}
+                            color={showForm ? Colors.status.error : Colors.primary.dark}
+                        />
                         <Text style={[styles.uploadBtnText, showForm && { color: Colors.status.error }]}>
                             {showForm ? "Cancelar" : "Subir"}
                         </Text>
@@ -441,18 +586,18 @@ export default function RecipesScreen() {
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {/* Upload Form (collapsible) */}
-                    {showForm && (
+                    {/* Formulario colapsable */}
+                    {showForm && user && (
                         <Animated.View style={{ opacity: formHeight }}>
                             <UploadForm
-                                userId={user!.id}
+                                userId={user.id}
                                 existingMonths={existingMonths}
                                 onSuccess={handleSuccess}
                             />
                         </Animated.View>
                     )}
 
-                    {/* List */}
+                    {/* Lista */}
                     {isLoading ? (
                         <View style={styles.centered}>
                             <ActivityIndicator size="large" color={Colors.primary.main} />
@@ -479,8 +624,6 @@ export default function RecipesScreen() {
                             <ReceiptCard
                                 key={item.id}
                                 item={item}
-                                isAdmin={isAdmin}
-                                onValidate={handleValidate}
                                 onDelete={handleDelete}
                                 onViewImage={setViewingImage}
                             />
@@ -489,8 +632,8 @@ export default function RecipesScreen() {
                 </ScrollView>
             </SafeAreaView>
 
-            {/* Image viewer */}
-            {viewingImage && (
+            {/* Visor de imagen */}
+            {viewingImage && !viewingImage.toLowerCase().includes(".pdf") && (
                 <ImageViewer uri={viewingImage} onClose={() => setViewingImage(null)} />
             )}
         </View>
@@ -528,6 +671,8 @@ const card = StyleSheet.create({
         borderRadius: 20, borderWidth: 1,
     },
     statusText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
+
+    // Imagen
     img: { width: "100%", height: 180, borderRadius: 10, marginTop: 4 },
     imgOverlay: {
         position: "absolute", bottom: 4, right: 0, left: 0,
@@ -537,12 +682,30 @@ const card = StyleSheet.create({
         borderBottomLeftRadius: 10, borderBottomRightRadius: 10,
     },
     imgOverlayText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: "#fff" },
+
+    // PDF
+    pdfPreview: {
+        flexDirection: "row", alignItems: "center", gap: 12,
+        padding: 14, borderRadius: 10, marginTop: 4,
+        backgroundColor: "#FEF2F2",
+        borderWidth: 1, borderColor: "#FECACA",
+    },
+    pdfIcon: {
+        width: 48, height: 48, borderRadius: 12,
+        backgroundColor: "#fff", borderWidth: 1, borderColor: "#FECACA",
+        alignItems: "center", justifyContent: "center",
+    },
+    pdfInfo: { flex: 1 },
+    pdfLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.screen.textPrimary },
+    pdfHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
+
     noImg: {
         height: 60, borderRadius: 10, borderWidth: 1.5,
         borderColor: Colors.screen.border, borderStyle: "dashed",
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     },
     noImgText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: Colors.screen.textMuted },
+
     adminActions: { flexDirection: "row", gap: 8 },
     actionBtn: {
         flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
@@ -591,6 +754,16 @@ const form = StyleSheet.create({
     imgPickerText: { fontFamily: "Outfit_500Medium", fontSize: 13, color: Colors.screen.textSecondary },
     imgPickerHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
     imgPreview: { width: "100%", height: 180, borderRadius: 12, marginBottom: 10 },
+
+    // PDF preview en el formulario
+    pdfPreview: {
+        flexDirection: "row", alignItems: "center", gap: 12,
+        padding: 14, borderRadius: 12, marginBottom: 10,
+        backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
+    },
+    pdfName: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.screen.textPrimary },
+    pdfHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
+
     imgActions: { flexDirection: "row", gap: 8 },
     imgBtn: {
         flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
@@ -638,10 +811,7 @@ const mp = StyleSheet.create({
         backgroundColor: Colors.screen.border, alignSelf: "center",
         marginTop: 12, marginBottom: 16,
     },
-    sheetTitle: {
-        fontFamily: "Outfit_700Bold", fontSize: 16,
-        color: Colors.screen.textPrimary, marginBottom: 16,
-    },
+    sheetTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary, marginBottom: 16 },
     yearRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
     yearBtn: {
         flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center",
@@ -681,7 +851,6 @@ const viewer = StyleSheet.create({
 
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
-
     header: {
         flexDirection: "row", alignItems: "center", justifyContent: "space-between",
         paddingHorizontal: 16, paddingVertical: 14,

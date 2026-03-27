@@ -1,22 +1,37 @@
 const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME!;
 const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
-const UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+
+// Cloudinary tiene endpoints separados para imágenes y archivos "raw"
+const IMAGE_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+const RAW_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/raw/upload`;
 
 export interface CloudinaryUploadResult {
-    url: string;        // URL con transformaciones (https)
-    publicId: string;   // ID para referenciar/eliminar la imagen después
+    url: string;
+    publicId: string;
+    resourceType: "image" | "raw";
 }
 
-export async function uploadImage(
+/**
+ * Sube una imagen (jpg/png) o PDF a Cloudinary.
+ * - Las imágenes van al endpoint /image/upload
+ * - Los PDFs van al endpoint /raw/upload
+ */
+export async function uploadFile(
     uri: string,
     folder?: string
 ): Promise<CloudinaryUploadResult> {
-    // Obtener el nombre y tipo del archivo desde la URI
-    const filename = uri.split("/").pop() ?? "image.jpg";
-    const extension = filename.split(".").pop()?.toLowerCase() ?? "jpg";
-    const mimeType = extension === "png" ? "image/png" : "image/jpeg";
+    const filename = uri.split("/").pop() ?? "file";
+    const extension = filename.split(".").pop()?.toLowerCase() ?? "";
 
-    // Construir el FormData que espera la REST API de Cloudinary
+    const isPdf = extension === "pdf";
+    const mimeType = isPdf
+        ? "application/pdf"
+        : extension === "png"
+            ? "image/png"
+            : "image/jpeg";
+
+    const uploadUrl = isPdf ? RAW_UPLOAD_URL : IMAGE_UPLOAD_URL;
+
     const formData = new FormData();
     formData.append("file", {
         uri,
@@ -26,14 +41,14 @@ export async function uploadImage(
     formData.append("upload_preset", UPLOAD_PRESET);
     if (folder) formData.append("folder", folder);
 
-    const response = await fetch(UPLOAD_URL, {
+    const response = await fetch(uploadUrl, {
         method: "POST",
         body: formData,
     });
 
     if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData?.error?.message ?? "Error al subir la imagen.");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.error?.message ?? "Error al subir el archivo.");
     }
 
     const data = await response.json();
@@ -41,5 +56,9 @@ export async function uploadImage(
     return {
         url: data.secure_url,
         publicId: data.public_id,
+        resourceType: isPdf ? "raw" : "image",
     };
 }
+
+// Mantén el nombre anterior como alias para no romper otros usos
+export const uploadImage = uploadFile;

@@ -8,6 +8,7 @@ export interface Recipe {
     img: string | null;
     usr_id: number;
     validated: boolean | null;
+    amount: number;
     // joins
     users?: { name: string; ap: string; am: string; dep_id: number } | null;
     departments?: { name: string } | null;
@@ -18,7 +19,8 @@ export interface CreateRecipePayload {
     month: string;
     img: string | null;
     usr_id: number;
-    validated: boolean;
+    validated: boolean | null; // null = pendiente, true = aprobado, false = rechazado
+    amount: number;
 }
 
 export const MONTHS = [
@@ -47,7 +49,7 @@ export function useRecipes() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Fetch del usuario actual
+    // ── Fetch del usuario actual ─────────────────────────────────────────────
     const fetchMyRecipes = async (userId: number) => {
         setIsLoading(true);
         setError(null);
@@ -67,7 +69,7 @@ export function useRecipes() {
         }
     };
 
-    // Fetch de todos (admin/tesorero)
+    // ── Fetch de todos (admin/tesorero) ──────────────────────────────────────
     const fetchAllRecipes = async (year?: number) => {
         setIsLoading(true);
         setError(null);
@@ -93,6 +95,7 @@ export function useRecipes() {
         }
     };
 
+    // ── Crear comprobante ────────────────────────────────────────────────────
     const createRecipe = async (payload: CreateRecipePayload): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
@@ -101,9 +104,14 @@ export function useRecipes() {
                 .from("recipes")
                 .insert([payload]);
 
-            if (dbError) { setError(dbError.message); return false; }
+            if (dbError) {
+                console.error("Error Supabase createRecipe:", dbError.message, dbError.details);
+                setError(dbError.message);
+                return false;
+            }
             return true;
-        } catch {
+        } catch (e: any) {
+            console.error("Error inesperado createRecipe:", e?.message);
             setError("No se pudo conectar al servidor.");
             return false;
         } finally {
@@ -111,6 +119,7 @@ export function useRecipes() {
         }
     };
 
+    // ── Validar (aprobar / rechazar) ─────────────────────────────────────────
     const validateRecipe = async (id: number, validated: boolean): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
@@ -134,6 +143,7 @@ export function useRecipes() {
         }
     };
 
+    // ── Eliminar ─────────────────────────────────────────────────────────────
     const deleteRecipe = async (id: number): Promise<boolean> => {
         setIsLoading(true);
         setError(null);

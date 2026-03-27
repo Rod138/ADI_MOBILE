@@ -3,6 +3,7 @@ import PrimaryButton from "@/components/PrimaryButton";
 import { useAuth } from "@/hooks/useAuth";
 import { globalStyles } from "@/utils/globalStyles";
 import { isFormValid, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, validateLoginForm } from "@/utils/validators";
+import { useSession } from "@/context/AuthContext";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -20,6 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function LoginScreen() {
     const { login, isLoading, error, clearError } = useAuth();
+    const { setUser } = useSession();
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -56,7 +58,10 @@ export default function LoginScreen() {
         setFieldErrors(errors);
         if (!isFormValid(errors)) return;
         const result = await login({ email: email.trim().toLowerCase(), password });
-        if (result) router.replace("/(tabs)/home" as any);
+        if (result) {
+            await setUser(result);
+            router.replace("/(tabs)/home" as any);
+        }
     };
 
     const handleForgotPassword = () => {

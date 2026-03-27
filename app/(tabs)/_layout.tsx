@@ -1,12 +1,10 @@
 import { Colors } from "@/constants/colors";
-import { AuthProvider } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 
 export default function TabsLayout() {
     return (
-        <AuthProvider>
-            <Tabs
+        <Tabs
                 screenOptions={{
                     headerShown: false,
                     tabBarStyle: {
@@ -56,7 +54,6 @@ export default function TabsLayout() {
                 {/* Páginas ocultas de la tab bar */}
                 <Tabs.Screen name="change-password" options={{ href: null }} />
                 <Tabs.Screen name="change-phone" options={{ href: null }} />
-            </Tabs>
-        </AuthProvider>
+        </Tabs>
     );
 }
