@@ -27,6 +27,7 @@ function ModuleCard({
     badge,
     stats,
     soon = false,
+    roleTag,
 }: {
     icon: keyof typeof Ionicons.glyphMap;
     title: string;
@@ -38,6 +39,8 @@ function ModuleCard({
     badge?: string;
     stats?: { label: string; value: string | number; color?: string }[];
     soon?: boolean;
+    /** Etiqueta de rol visible (ej. "Solo admin") */
+    roleTag?: string;
 }) {
     return (
         <TouchableOpacity
@@ -63,6 +66,12 @@ function ModuleCard({
                             {soon && (
                                 <View style={styles.soonBadge}>
                                     <Text style={styles.soonBadgeText}>PRONTO</Text>
+                                </View>
+                            )}
+                            {roleTag && (
+                                <View style={styles.roleBadge}>
+                                    <Ionicons name="shield-checkmark-outline" size={9} color={Colors.secondary.main} />
+                                    <Text style={styles.roleBadgeText}>{roleTag}</Text>
                                 </View>
                             )}
                         </View>
@@ -96,6 +105,9 @@ export default function FinanceScreen() {
     const { user } = useSession();
     const { recipes, fetchMyRecipes } = useRecipes();
 
+    // Rol 2 = Tesorero, 3 = Admin, 4 = Tesorero+Admin
+    const canManageExpenses = (user?.rol_id ?? 0) >= 2;
+
     useEffect(() => {
         if (user) fetchMyRecipes(user.id);
     }, [user]);
@@ -126,13 +138,13 @@ export default function FinanceScreen() {
                     contentContainerStyle={styles.scroll}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Section label */}
+                    {/* ── DISPONIBLE AHORA ─────────────────────────────── */}
                     <View style={styles.sectionLabel}>
                         <Text style={styles.sectionLabelText}>DISPONIBLE AHORA</Text>
                         <View style={styles.sectionLabelLine} />
                     </View>
 
-                    {/* Cuotas — ACTIVO */}
+                    {/* Cuotas — visible para todos */}
                     <ModuleCard
                         icon="receipt-outline"
                         title="Mis cuotas"
@@ -143,13 +155,26 @@ export default function FinanceScreen() {
                         onPress={() => router.push("/(finance)/recipes" as any)}
                     />
 
-                    {/* Section label */}
+                    {/* Gastos — visible solo para admin/tesorero */}
+                    {canManageExpenses && (
+                        <ModuleCard
+                            icon="trending-down-outline"
+                            title="Gastos del condominio"
+                            description="Registra y consulta los egresos del condominio con evidencia fotográfica."
+                            accentColor={Colors.secondary.main}
+                            accentBg={Colors.secondary.soft}
+                            accentBorder="#FED7AA"
+                            roleTag="Admin / Tesorero"
+                            onPress={() => router.push("/(finance)/expenses" as any)}
+                        />
+                    )}
+
+                    {/* ── EN DESARROLLO ────────────────────────────────── */}
                     <View style={styles.sectionLabel}>
                         <Text style={styles.sectionLabelText}>EN DESARROLLO</Text>
                         <View style={styles.sectionLabelLine} />
                     </View>
 
-                    {/* Próximas funciones */}
                     <ModuleCard
                         icon="bar-chart-outline"
                         title="Estado de cuenta"
@@ -212,9 +237,7 @@ const styles = StyleSheet.create({
 
     scroll: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 40, gap: 10 },
 
-    sectionLabel: {
-        flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4,
-    },
+    sectionLabel: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
     sectionLabelText: {
         fontFamily: "Outfit_700Bold", fontSize: 10,
         color: Colors.screen.textMuted, letterSpacing: 1.8,
@@ -236,13 +259,11 @@ const styles = StyleSheet.create({
         alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1,
     },
     moduleTitles: { flex: 1, gap: 4 },
-    moduleTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+    moduleTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
     moduleTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary },
     moduleTitleMuted: { color: Colors.screen.textSecondary },
     moduleDescription: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted, lineHeight: 18 },
-    moduleBadge: {
-        paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, borderWidth: 1,
-    },
+    moduleBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
     moduleBadgeText: { fontFamily: "Outfit_700Bold", fontSize: 9, letterSpacing: 0.5 },
     soonBadge: {
         paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5,
@@ -252,14 +273,23 @@ const styles = StyleSheet.create({
         fontFamily: "Outfit_700Bold", fontSize: 8,
         color: Colors.screen.textMuted, letterSpacing: 0.8,
     },
+    // Badge de rol (naranja)
+    roleBadge: {
+        flexDirection: "row", alignItems: "center", gap: 3,
+        paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5,
+        backgroundColor: Colors.secondary.soft,
+        borderWidth: 1, borderColor: "#FED7AA",
+    },
+    roleBadgeText: {
+        fontFamily: "Outfit_700Bold", fontSize: 8,
+        color: Colors.secondary.main, letterSpacing: 0.5,
+    },
     moduleArrow: {
         width: 32, height: 32, borderRadius: 9, borderWidth: 1,
         alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2,
     },
 
-    statsRow: {
-        flexDirection: "row", borderTopWidth: 1, paddingTop: 12, gap: 0,
-    },
+    statsRow: { flexDirection: "row", borderTopWidth: 1, paddingTop: 12, gap: 0 },
     statItem: { flex: 1, alignItems: "center", gap: 2 },
     statValue: { fontFamily: "Outfit_700Bold", fontSize: 18, color: Colors.screen.textPrimary },
     statLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.screen.textMuted },
