@@ -1,3 +1,0 @@
-﻿app/(finance)/recipes.tsx(44,55): error TS2353: Object literal may only specify known properties, and 'size' does not exist in type 'InfoOptions'.
-app/(finance)/recipes.tsx(139,40): error TS2353: Object literal may only specify known properties, and 'size' does not exist in type 'InfoOptions'.
-app/(finance)/recipes.tsx(367,69): error TS2353: Object literal may only specify known properties, and 'size' does not exist in type 'InfoOptions'.
