@@ -60,16 +60,18 @@ function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
 
 function ExpenseCard({
     item,
+    canManage,
     onDelete,
     onViewImage,
 }: {
     item: Expense;
+    canManage: boolean;
     onDelete: (id: number) => void;
     onViewImage: (url: string) => void;
 }) {
     return (
         <View style={card.root}>
-            {/* Accent bar naranja — color de "gastos / egresos" */}
+            {/* Barra naranja */}
             <View style={card.accentBar} />
 
             <View style={card.inner}>
@@ -113,15 +115,17 @@ function ExpenseCard({
                     </View>
                 )}
 
-                {/* Footer: eliminar */}
-                <TouchableOpacity
-                    style={card.deleteBtn}
-                    onPress={() => onDelete(item.id)}
-                    activeOpacity={0.7}
-                >
-                    <Ionicons name="trash-outline" size={13} color={Colors.screen.textMuted} />
-                    <Text style={card.deleteBtnText}>Eliminar</Text>
-                </TouchableOpacity>
+                {/* Eliminar — solo para admin/tesorero */}
+                {canManage && (
+                    <TouchableOpacity
+                        style={card.deleteBtn}
+                        onPress={() => onDelete(item.id)}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons name="trash-outline" size={13} color={Colors.screen.textMuted} />
+                        <Text style={card.deleteBtnText}>Eliminar</Text>
+                    </TouchableOpacity>
+                )}
             </View>
         </View>
     );
@@ -141,8 +145,6 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
         amount?: string;
         image?: string;
     }>({});
-
-    // ── Imagen ───────────────────────────────────────────────────────────────
 
     const pickImage = async () => {
         const p = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -186,8 +188,6 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
             { text: "Cancelar", style: "cancel" },
         ]);
 
-    // ── Validación ────────────────────────────────────────────────────────────
-
     const validate = () => {
         const e: typeof errors = {};
 
@@ -212,8 +212,6 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
         setErrors(e);
         return Object.keys(e).length === 0;
     };
-
-    // ── Envío ─────────────────────────────────────────────────────────────────
 
     const handleSubmit = async () => {
         if (!validate()) return;
@@ -251,11 +249,8 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
         }
     };
 
-    // ── Render ────────────────────────────────────────────────────────────────
-
     return (
         <View style={form.root}>
-            {/* Header del form */}
             <View style={form.header}>
                 <View style={form.headerIcon}>
                     <Ionicons name="add-circle-outline" size={20} color={Colors.secondary.main} />
@@ -266,7 +261,6 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
                 </View>
             </View>
 
-            {/* Asunto */}
             <InputField
                 theme="light"
                 label="ASUNTO DEL GASTO"
@@ -281,7 +275,6 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
                 maxLength={120}
             />
 
-            {/* Monto */}
             <InputField
                 theme="light"
                 label="MONTO ($)"
@@ -290,7 +283,6 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
                 keyboardType="decimal-pad"
                 value={amount}
                 onChangeText={(t) => {
-                    // Solo números y punto decimal
                     setAmount(t.replace(/[^0-9.]/g, ""));
                     setErrors(p => ({ ...p, amount: undefined }));
                 }}
@@ -298,7 +290,6 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
                 maxLength={10}
             />
 
-            {/* Imagen de prueba */}
             <View style={form.field}>
                 <Text style={form.fieldLabel}>IMAGEN DE PRUEBA</Text>
 
@@ -352,7 +343,6 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
                 )}
             </View>
 
-            {/* CTA */}
             {uploading || isLoading ? (
                 <View style={form.loadingRow}>
                     <ActivityIndicator size="small" color={Colors.secondary.main} />
@@ -374,7 +364,7 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
 
 // ── Summary Banner ────────────────────────────────────────────────────────────
 
-function SummaryBanner({ expenses }: { expenses: Expense[] }) {
+function SummaryBanner({ expenses, canManage }: { expenses: Expense[]; canManage: boolean }) {
     const total = expenses.reduce((acc, e) => acc + Number(e.amount), 0);
     const thisMonth = expenses.filter(e => {
         const d = new Date(e.created_at);
@@ -413,6 +403,21 @@ function SummaryBanner({ expenses }: { expenses: Expense[] }) {
     );
 }
 
+// ── Read-only notice for residents ────────────────────────────────────────────
+
+function ReadOnlyNotice() {
+    return (
+        <View style={notice.root}>
+            <View style={notice.iconWrap}>
+                <Ionicons name="eye-outline" size={16} color={Colors.primary.dark} />
+            </View>
+            <Text style={notice.text}>
+                Estás viendo los gastos del condominio. Solo administradores y tesoreros pueden registrar o eliminar gastos.
+            </Text>
+        </View>
+    );
+}
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function ExpensesScreen() {
@@ -423,7 +428,7 @@ export default function ExpensesScreen() {
     const [showForm, setShowForm] = useState(false);
     const formAnim = useRef(new Animated.Value(0)).current;
 
-    // Solo rol 2 (tesorero), 3 (admin), 4 (tesorero+admin)
+    // Rol 1 = Residente (solo lectura), 2+ = Tesorero/Admin (puede gestionar)
     const canManage = (user?.rol_id ?? 0) >= 2;
 
     useEffect(() => {
@@ -488,7 +493,9 @@ export default function ExpensesScreen() {
                         </TouchableOpacity>
                         <View>
                             <Text style={styles.headerTitle}>Gastos del condominio</Text>
-                            <Text style={styles.headerSubtitle}>Egresos registrados</Text>
+                            <Text style={styles.headerSubtitle}>
+                                {canManage ? "Egresos registrados" : "Consulta de egresos"}
+                            </Text>
                         </View>
                     </View>
 
@@ -521,16 +528,21 @@ export default function ExpensesScreen() {
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {/* ── Formulario colapsable ──────────────────────────── */}
+                    {/* ── Formulario colapsable (solo admin/tesorero) ───── */}
                     {showForm && canManage && (
                         <Animated.View style={{ opacity: formAnim }}>
                             <CreateForm onSuccess={handleSuccess} />
                         </Animated.View>
                     )}
 
+                    {/* ── Aviso solo lectura (solo residentes) ─────────── */}
+                    {!canManage && !isLoading && expenses.length > 0 && (
+                        <ReadOnlyNotice />
+                    )}
+
                     {/* ── Resumen ────────────────────────────────────────── */}
                     {!isLoading && expenses.length > 0 && (
-                        <SummaryBanner expenses={expenses} />
+                        <SummaryBanner expenses={expenses} canManage={canManage} />
                     )}
 
                     {/* ── Lista de gastos ────────────────────────────────── */}
@@ -560,12 +572,11 @@ export default function ExpensesScreen() {
                             <Text style={styles.stateText}>
                                 {canManage
                                     ? "Toca \"Nuevo\" para registrar el primer gasto."
-                                    : "Aún no hay gastos registrados."}
+                                    : "Aún no hay gastos registrados por la administración."}
                             </Text>
                         </View>
                     ) : (
                         <>
-                            {/* Sección label */}
                             <View style={styles.sectionLabel}>
                                 <Text style={styles.sectionLabelText}>HISTORIAL DE GASTOS</Text>
                                 <View style={styles.sectionLabelLine} />
@@ -575,6 +586,7 @@ export default function ExpensesScreen() {
                                 <ExpenseCard
                                     key={item.id}
                                     item={item}
+                                    canManage={canManage}
                                     onDelete={handleDelete}
                                     onViewImage={setViewingImage}
                                 />
@@ -608,15 +620,12 @@ const card = StyleSheet.create({
         shadowRadius: 8,
         elevation: 2,
     },
-    // Barra naranja (color de egresos)
     accentBar: {
         height: 3,
         width: "100%",
         backgroundColor: Colors.secondary.main,
     },
     inner: { padding: 14, gap: 10 },
-
-    // Header
     header: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
     iconWrap: {
         width: 40, height: 40, borderRadius: 12,
@@ -649,8 +658,6 @@ const card = StyleSheet.create({
         fontSize: 16,
         color: Colors.secondary.main,
     },
-
-    // Imagen
     img: { width: "100%", height: 170, borderRadius: 10 },
     imgOverlay: {
         position: "absolute", bottom: 0, left: 0, right: 0,
@@ -668,8 +675,6 @@ const card = StyleSheet.create({
     noImgText: {
         fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted,
     },
-
-    // Delete
     deleteBtn: {
         flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-end",
         paddingHorizontal: 8, paddingVertical: 4,
@@ -693,7 +698,6 @@ const form = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 8,
         elevation: 2,
-        // Borde superior naranja
         borderTopWidth: 3,
         borderTopColor: Colors.secondary.main,
     },
@@ -706,14 +710,12 @@ const form = StyleSheet.create({
     },
     headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: Colors.screen.textPrimary },
     headerSubtitle: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 1 },
-
     field: { marginBottom: 18 },
     fieldLabel: {
         fontFamily: "Outfit_700Bold", fontSize: 11,
         color: Colors.screen.textSecondary, letterSpacing: 1.2,
         textTransform: "uppercase", marginBottom: 8,
     },
-
     imgPicker: {
         height: 104, borderRadius: 12, borderWidth: 1.5,
         borderColor: Colors.screen.border, borderStyle: "dashed",
@@ -763,6 +765,24 @@ const summary = StyleSheet.create({
     value: { fontFamily: "Outfit_700Bold", fontSize: 14, color: Colors.secondary.main, marginTop: 1 },
 });
 
+const notice = StyleSheet.create({
+    root: {
+        flexDirection: "row", alignItems: "flex-start", gap: 10,
+        backgroundColor: Colors.primary.soft,
+        borderWidth: 1, borderColor: Colors.primary.muted,
+        borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
+    },
+    iconWrap: {
+        width: 28, height: 28, borderRadius: 8,
+        backgroundColor: Colors.primary.muted,
+        alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1,
+    },
+    text: {
+        flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12,
+        color: Colors.primary.dark, lineHeight: 18,
+    },
+});
+
 const viewer = StyleSheet.create({
     overlay: {
         flex: 1, backgroundColor: "rgba(0,0,0,0.92)",
@@ -780,7 +800,6 @@ const viewer = StyleSheet.create({
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
 
-    // Header
     header: {
         flexDirection: "row", alignItems: "center", justifyContent: "space-between",
         paddingHorizontal: 16, paddingVertical: 14,
@@ -806,7 +825,6 @@ const styles = StyleSheet.create({
 
     scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40, gap: 12 },
 
-    // Section label
     sectionLabel: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
     sectionLabelText: {
         fontFamily: "Outfit_700Bold", fontSize: 10,
@@ -814,7 +832,6 @@ const styles = StyleSheet.create({
     },
     sectionLabelLine: { flex: 1, height: 1, backgroundColor: Colors.screen.border },
 
-    // States
     centered: { paddingVertical: 40, alignItems: "center", gap: 10 },
     stateIcon: {
         width: 56, height: 56, borderRadius: 16,
@@ -833,7 +850,6 @@ const styles = StyleSheet.create({
     },
     retryText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.secondary.main },
 
-    // Empty
     emptyCard: {
         backgroundColor: Colors.screen.card, borderRadius: 16,
         borderWidth: 1, borderColor: Colors.screen.border,

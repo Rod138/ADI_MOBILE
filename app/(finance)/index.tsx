@@ -39,7 +39,6 @@ function ModuleCard({
     badge?: string;
     stats?: { label: string; value: string | number; color?: string }[];
     soon?: boolean;
-    /** Etiqueta de rol visible (ej. "Solo admin") */
     roleTag?: string;
 }) {
     return (
@@ -105,11 +104,11 @@ export default function FinanceScreen() {
     const { user } = useSession();
     const { recipes, fetchMyRecipes } = useRecipes();
 
-    // Rol 2 = Tesorero, 3 = Admin, 4 = Tesorero+Admin
+    // Rol 1 = Residente (solo lectura), 2+ = Tesorero/Admin (puede gestionar)
     const canManageExpenses = (user?.rol_id ?? 0) >= 2;
 
     useEffect(() => {
-        if (user) fetchMyRecipes(user.id);
+        if (user) fetchMyRecipes(user.dep_id);
     }, [user]);
 
     return (
@@ -155,20 +154,23 @@ export default function FinanceScreen() {
                         onPress={() => router.push("/(finance)/recipes" as any)}
                     />
 
-                    {/* Gastos — visible solo para admin/tesorero */}
-                    {canManageExpenses && (
-                        <ModuleCard
-                            icon="trending-down-outline"
-                            title="Gastos del condominio"
-                            description="Registra y consulta los egresos del condominio con evidencia fotográfica."
-                            accentColor={Colors.secondary.main}
-                            accentBg={Colors.secondary.soft}
-                            accentBorder="#FED7AA"
-                            roleTag="Admin / Tesorero"
-                            onPress={() => router.push("/(finance)/expenses" as any)}
-                        />
-                    )}
+                    {/* Gastos — visible para TODOS, gestión solo admin/tesorero */}
+                    <ModuleCard
+                        icon="trending-down-outline"
+                        title="Gastos del condominio"
+                        description={
+                            canManageExpenses
+                                ? "Registra y consulta los egresos del condominio con evidencia fotográfica."
+                                : "Consulta los egresos del condominio registrados por la administración."
+                        }
+                        accentColor={Colors.secondary.main}
+                        accentBg={Colors.secondary.soft}
+                        accentBorder="#FED7AA"
+                        roleTag={canManageExpenses ? "Admin / Tesorero" : undefined}
+                        onPress={() => router.push("/(finance)/expenses" as any)}
+                    />
 
+                    {/* Tablón de cuotas — solo admin/tesorero */}
                     {canManageExpenses && (
                         <ModuleCard
                             icon="people-outline"
@@ -286,7 +288,6 @@ const styles = StyleSheet.create({
         fontFamily: "Outfit_700Bold", fontSize: 8,
         color: Colors.screen.textMuted, letterSpacing: 0.8,
     },
-    // Badge de rol (naranja)
     roleBadge: {
         flexDirection: "row", alignItems: "center", gap: 3,
         paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5,
@@ -301,7 +302,6 @@ const styles = StyleSheet.create({
         width: 32, height: 32, borderRadius: 9, borderWidth: 1,
         alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2,
     },
-
     statsRow: { flexDirection: "row", borderTopWidth: 1, paddingTop: 12, gap: 0 },
     statItem: { flex: 1, alignItems: "center", gap: 2 },
     statValue: { fontFamily: "Outfit_700Bold", fontSize: 18, color: Colors.screen.textPrimary },
