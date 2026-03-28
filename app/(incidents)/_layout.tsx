@@ -44,6 +44,7 @@ export default function IncidentsLayout() {
             />
             <Tabs.Screen name="edit-incident" options={{ href: null }} />
             <Tabs.Screen name="incident-detail" options={{ href: null }} />
+            <Tabs.Screen name="admin-incident" options={{ href: null }} />
         </Tabs>
     );
 }

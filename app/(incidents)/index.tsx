@@ -173,11 +173,18 @@ export default function IncidentsScreen() {
                             <IncidentCard
                                 item={item}
                                 currentUserId={user?.id}
+                                currentUserRole={user?.rol_id}
                                 onPress={(inc) => router.push({
                                     pathname: "/(incidents)/incident-detail",
                                     params: { data: JSON.stringify(inc) },
                                 } as any)}
                                 onEdit={(inc) => router.push({ pathname: "/(incidents)/edit-incident", params: { id: inc.id } } as any)}
+                                onAdminEdit={(inc) =>
+                                    router.push({
+                                        pathname: "/(incidents)/admin-incident",
+                                        params: { data: JSON.stringify(inc) },
+                                    } as any)
+                                }
                             />
                         )}
                         contentContainerStyle={styles.list}

@@ -53,13 +53,22 @@ export function getStatusStyle(name: string) {
 interface IncidentCardProps {
     item: Incident;
     currentUserId?: number;
+    currentUserRole?: number; // 1=Residente, 2=Tesorero, 3=Admin, 4=Tesorero+Admin
     onPress?: (item: Incident) => void;
     onEdit?: (item: Incident) => void;
+    onAdminEdit?: (item: Incident) => void; // Panel admin
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
 
-export default function IncidentCard({ item, currentUserId, onPress, onEdit }: IncidentCardProps) {
+export default function IncidentCard({
+    item,
+    currentUserId,
+    currentUserRole = 1,
+    onPress,
+    onEdit,
+    onAdminEdit,
+}: IncidentCardProps) {
     const reportedBy = item.users
         ? `${item.users.name} ${item.users.ap}${item.users.am ? " " + item.users.am : ""}`.trim()
         : "—";
@@ -67,17 +76,26 @@ export default function IncidentCard({ item, currentUserId, onPress, onEdit }: I
     const ss = getStatusStyle(statusName);
     const { date, time } = formatDateTime(item.created_at);
     const isOwner = currentUserId !== undefined && item.usr_id === currentUserId;
+    const isAdmin = currentUserRole >= 3;
 
     const isPending = (item.inc_status?.name ?? "").toLowerCase().includes("pend");
     const withinEditWindow = Date.now() - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000;
     const showEditBtn = isOwner && onEdit && withinEditWindow && isPending;
+    const showAdminBtn = isAdmin && onAdminEdit;
 
-    const editedLabel = item.edited_at ? (() => {
-        const { date: ed, time: et } = formatDateTime(item.edited_at);
-        return `Editada · ${ed} ${et}`;
-    })() : null;
+    const editedLabel = item.edited_at
+        ? (() => {
+            const { date: ed, time: et } = formatDateTime(item.edited_at);
+            return `Editada · ${ed} ${et}`;
+        })()
+        : null;
 
-    const initials = reportedBy.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+    const initials = reportedBy
+        .split(" ")
+        .map((w) => w[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase();
 
     return (
         <TouchableOpacity
@@ -91,12 +109,9 @@ export default function IncidentCard({ item, currentUserId, onPress, onEdit }: I
             <View style={styles.inner}>
                 {/* Header row */}
                 <View style={styles.headerRow}>
-                    {/* Avatar */}
                     <View style={[styles.avatar, { backgroundColor: ss.bg, borderColor: ss.border }]}>
                         <Text style={[styles.avatarText, { color: ss.color }]}>{initials}</Text>
                     </View>
-
-                    {/* Info */}
                     <View style={styles.headerMeta}>
                         <Text style={styles.reportedBy} numberOfLines={1}>{reportedBy}</Text>
                         <View style={styles.dateRow}>
@@ -110,8 +125,6 @@ export default function IncidentCard({ item, currentUserId, onPress, onEdit }: I
                             </View>
                         )}
                     </View>
-
-                    {/* Status badge */}
                     <View style={[styles.statusBadge, { backgroundColor: ss.bg, borderColor: ss.border }]}>
                         <Ionicons name={ss.icon} size={12} color={ss.color} />
                         <Text style={[styles.statusText, { color: ss.color }]}>{statusName}</Text>
@@ -150,7 +163,20 @@ export default function IncidentCard({ item, currentUserId, onPress, onEdit }: I
                     </View>
 
                     <View style={styles.footerRight}>
-                        {showEditBtn && (
+                        {/* Admin: botón Gestionar */}
+                        {showAdminBtn && (
+                            <TouchableOpacity
+                                style={styles.adminBtn}
+                                onPress={(e) => { e.stopPropagation?.(); onAdminEdit!(item); }}
+                                activeOpacity={0.75}
+                            >
+                                <Ionicons name="shield-outline" size={12} color={Colors.primary.dark} />
+                                <Text style={styles.adminBtnText}>Gestionar</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {/* Owner: botón Editar (solo si no es admin) */}
+                        {showEditBtn && !isAdmin && (
                             <TouchableOpacity
                                 style={styles.editBtn}
                                 onPress={(e) => { e.stopPropagation?.(); onEdit!(item); }}
@@ -160,6 +186,7 @@ export default function IncidentCard({ item, currentUserId, onPress, onEdit }: I
                                 <Text style={styles.editBtnText}>Editar</Text>
                             </TouchableOpacity>
                         )}
+
                         <View style={styles.detailHint}>
                             <Text style={styles.detailHintText}>Ver detalle</Text>
                             <Ionicons name="chevron-forward" size={12} color={Colors.primary.main} />
@@ -187,167 +214,63 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 2,
     },
-    accentBar: {
-        height: 3,
-        width: "100%",
-    },
-    inner: {
-        padding: 14,
-        gap: 10,
-    },
+    accentBar: { height: 3, width: "100%" },
+    inner: { padding: 14, gap: 10 },
 
-    // Header
-    headerRow: {
-        flexDirection: "row",
-        alignItems: "flex-start",
-        gap: 10,
-    },
+    headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
     avatar: {
-        width: 38,
-        height: 38,
-        borderRadius: 12,
-        borderWidth: 1.5,
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
+        width: 38, height: 38, borderRadius: 12, borderWidth: 1.5,
+        alignItems: "center", justifyContent: "center", flexShrink: 0,
     },
-    avatarText: {
-        fontFamily: "Outfit_700Bold",
-        fontSize: 13,
-        letterSpacing: 0.5,
-    },
-    headerMeta: {
-        flex: 1,
-        gap: 3,
-    },
-    reportedBy: {
-        fontFamily: "Outfit_600SemiBold",
-        fontSize: 14,
-        color: Colors.screen.textPrimary,
-        lineHeight: 18,
-    },
-    dateRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-    },
-    dateText: {
-        fontFamily: "Outfit_400Regular",
-        fontSize: 11,
-        color: Colors.screen.textMuted,
-    },
-    editedRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 3,
-    },
-    editedText: {
-        fontFamily: "Outfit_400Regular",
-        fontSize: 10,
-        color: Colors.primary.main,
-    },
+    avatarText: { fontFamily: "Outfit_700Bold", fontSize: 13, letterSpacing: 0.5 },
+    headerMeta: { flex: 1, gap: 3 },
+    reportedBy: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textPrimary, lineHeight: 18 },
+    dateRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+    dateText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
+    editedRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+    editedText: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.primary.main },
     statusBadge: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 20,
-        borderWidth: 1,
-        flexShrink: 0,
+        flexDirection: "row", alignItems: "center", gap: 4,
+        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1, flexShrink: 0,
     },
-    statusText: {
-        fontFamily: "Outfit_600SemiBold",
-        fontSize: 10,
-        letterSpacing: 0.2,
-    },
+    statusText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, letterSpacing: 0.2 },
 
-    // Chips
-    chipsRow: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        gap: 6,
-    },
+    chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
     chip: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-        backgroundColor: Colors.neutral[100],
-        borderRadius: 6,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderWidth: 1,
-        borderColor: Colors.screen.border,
+        flexDirection: "row", alignItems: "center", gap: 4,
+        backgroundColor: Colors.neutral[100], borderRadius: 6,
+        paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: Colors.screen.border,
     },
-    chipText: {
-        fontFamily: "Outfit_500Medium",
-        fontSize: 11,
-        color: Colors.screen.textSecondary,
-    },
+    chipText: { fontFamily: "Outfit_500Medium", fontSize: 11, color: Colors.screen.textSecondary },
 
-    // Description
-    description: {
-        fontFamily: "Outfit_400Regular",
-        fontSize: 13,
-        color: Colors.screen.textSecondary,
-        lineHeight: 19,
-    },
+    description: { fontFamily: "Outfit_400Regular", fontSize: 13, color: Colors.screen.textSecondary, lineHeight: 19 },
 
-    // Image
-    image: {
-        width: "100%",
-        height: 160,
-        borderRadius: 10,
-    },
+    image: { width: "100%", height: 160, borderRadius: 10 },
 
-    // Footer
     footer: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingTop: 10,
-        borderTopWidth: 1,
-        borderTopColor: Colors.screen.border,
+        flexDirection: "row", alignItems: "center",
+        paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.screen.border,
     },
-    costPill: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-        flex: 1,
+    costPill: { flexDirection: "row", alignItems: "center", gap: 4, flex: 1 },
+    costText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.screen.textMuted },
+    footerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+
+    // Admin button — verde oscuro
+    adminBtn: {
+        flexDirection: "row", alignItems: "center", gap: 5,
+        paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+        backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
     },
-    costText: {
-        fontFamily: "Outfit_500Medium",
-        fontSize: 12,
-        color: Colors.screen.textMuted,
-    },
-    footerRight: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-    },
+    adminBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.dark },
+
+    // Edit button — igual que antes
     editBtn: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 5,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 8,
-        backgroundColor: Colors.primary.soft,
-        borderWidth: 1,
-        borderColor: Colors.primary.muted,
+        flexDirection: "row", alignItems: "center", gap: 5,
+        paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+        backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
     },
-    editBtnText: {
-        fontFamily: "Outfit_600SemiBold",
-        fontSize: 12,
-        color: Colors.primary.dark,
-    },
-    detailHint: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 2,
-    },
-    detailHintText: {
-        fontFamily: "Outfit_500Medium",
-        fontSize: 11,
-        color: Colors.primary.main,
-    },
+    editBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.dark },
+
+    detailHint: { flexDirection: "row", alignItems: "center", gap: 2 },
+    detailHintText: { fontFamily: "Outfit_500Medium", fontSize: 11, color: Colors.primary.main },
 });
