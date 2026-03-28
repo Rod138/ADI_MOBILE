@@ -11,12 +11,16 @@ import {
     Animated,
     FlatList,
     Image,
+    Keyboard,
+    KeyboardAvoidingView,
     Linking,
     Modal,
+    Platform,
     ScrollView,
     StatusBar,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
@@ -119,6 +123,166 @@ function MonthTab({
     );
 }
 
+// ─── Cash Payment Modal ───────────────────────────────────────────────────────
+
+function CashPaymentModal({
+    dept,
+    month,
+    year,
+    onClose,
+    onConfirm,
+}: {
+    dept: Department;
+    month: string;
+    year: number;
+    onClose: () => void;
+    onConfirm: (depId: number, month: string, year: number, amount: number) => Promise<void>;
+}) {
+    const [amount, setAmount] = useState("");
+    const [amountError, setAmountError] = useState<string | undefined>();
+    const [saving, setSaving] = useState(false);
+
+    const validateAmount = (val: string) => {
+        if (!val.trim()) return "Ingresa el monto del pago.";
+        const n = parseInt(val, 10);
+        if (isNaN(n) || n <= 0) return "El monto debe ser mayor a 0.";
+        if (val.length > 6) return "Máximo 6 dígitos.";
+        return undefined;
+    };
+
+    const handleConfirm = async () => {
+        Keyboard.dismiss();
+        const err = validateAmount(amount);
+        if (err) { setAmountError(err); return; }
+
+        Alert.alert(
+            "Registrar pago en efectivo",
+            `¿Confirmar pago de ${dept.name} por $${amount} correspondiente a ${month} ${year}?\n\nEste registro quedará aprobado de inmediato.`,
+            [
+                { text: "Cancelar", style: "cancel" },
+                {
+                    text: "Confirmar",
+                    onPress: async () => {
+                        setSaving(true);
+                        await onConfirm(dept.id, month, year, parseInt(amount, 10));
+                        setSaving(false);
+                        onClose();
+                    },
+                },
+            ]
+        );
+    };
+
+    return (
+        <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+            >
+                <View style={cash.overlay}>
+                    <View style={cash.sheet}>
+                        {/* Handle */}
+                        <View style={cash.handle} />
+
+                        {/* Header */}
+                        <View style={cash.header}>
+                            <View style={cash.headerIconWrap}>
+                                <Ionicons name="cash" size={22} color="#16A34A" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={cash.headerTitle}>Pago en efectivo</Text>
+                                <Text style={cash.headerSub}>Registro manual por tesorero</Text>
+                            </View>
+                            <TouchableOpacity style={cash.closeBtn} onPress={onClose} activeOpacity={0.7}>
+                                <Ionicons name="close" size={16} color={Colors.screen.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Info pills — dept + period (pre-filled, read-only) */}
+                        <View style={cash.infoRow}>
+                            <View style={cash.infoPill}>
+                                <Ionicons name="business-outline" size={13} color={Colors.primary.dark} />
+                                <Text style={cash.infoPillText} numberOfLines={1}>{dept.name}</Text>
+                            </View>
+                            <View style={cash.infoPill}>
+                                <Ionicons name="calendar-outline" size={13} color={Colors.primary.dark} />
+                                <Text style={cash.infoPillText}>{month} {year}</Text>
+                            </View>
+                        </View>
+
+                        {/* Divider */}
+                        <View style={cash.divider} />
+
+                        {/* Amount input */}
+                        <View style={cash.fieldWrap}>
+                            <Text style={cash.fieldLabel}>MONTO RECIBIDO</Text>
+                            <View style={[cash.inputRow, amountError && cash.inputRowError]}>
+                                <Text style={cash.currencySymbol}>$</Text>
+                                <TextInput
+                                    style={cash.input}
+                                    placeholder="0"
+                                    placeholderTextColor={Colors.screen.textMuted}
+                                    keyboardType="number-pad"
+                                    maxLength={6}
+                                    value={amount}
+                                    onChangeText={(v) => {
+                                        setAmount(v.replace(/[^0-9]/g, ""));
+                                        setAmountError(undefined);
+                                    }}
+                                    autoFocus
+                                    returnKeyType="done"
+                                    onSubmitEditing={handleConfirm}
+                                />
+                                {amount.length > 0 && (
+                                    <TouchableOpacity onPress={() => { setAmount(""); setAmountError(undefined); }}>
+                                        <Ionicons name="close-circle" size={18} color={Colors.screen.textMuted} />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                            {amountError && (
+                                <View style={cash.errorRow}>
+                                    <Ionicons name="alert-circle-outline" size={12} color={Colors.status.error} />
+                                    <Text style={cash.errorText}>{amountError}</Text>
+                                </View>
+                            )}
+                        </View>
+
+                        {/* Notice */}
+                        <View style={cash.notice}>
+                            <Ionicons name="information-circle-outline" size={14} color={Colors.primary.dark} />
+                            <Text style={cash.noticeText}>
+                                Este registro se aprobará automáticamente y quedará visible para el residente.
+                            </Text>
+                        </View>
+
+                        {/* Actions */}
+                        <View style={cash.actions}>
+                            <TouchableOpacity style={cash.cancelBtn} onPress={onClose} activeOpacity={0.8}>
+                                <Text style={cash.cancelText}>Cancelar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[cash.confirmBtn, saving && { opacity: 0.6 }]}
+                                onPress={handleConfirm}
+                                disabled={saving}
+                                activeOpacity={0.85}
+                            >
+                                {saving ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="checkmark-circle" size={17} color="#fff" />
+                                        <Text style={cash.confirmText}>Registrar pago</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </KeyboardAvoidingView>
+        </Modal>
+    );
+}
+
 // ─── Dept Row (board view) ────────────────────────────────────────────────────
 
 function DeptRow({
@@ -127,12 +291,14 @@ function DeptRow({
     onValidate,
     onViewImage,
     onViewReceipt,
+    onCashPayment,
 }: {
     dept: Department;
     recipe: Recipe | null;
     onValidate: (id: number, validated: boolean) => void;
     onViewImage: (url: string) => void;
     onViewReceipt: (recipe: Recipe) => void;
+    onCashPayment: (dept: Department) => void;
 }) {
     const sc = recipe ? getStatusConfig(recipe.validated ?? null) : null;
     const missing = !recipe;
@@ -141,15 +307,17 @@ function DeptRow({
     return (
         <TouchableOpacity
             style={[drow.root, missing && drow.rootMissing]}
-            activeOpacity={recipe ? 0.82 : 1}
+            activeOpacity={recipe ? 0.82 : 0.95}
             onPress={() => recipe && onViewReceipt(recipe)}
         >
-            {/* Left — dept name */}
+            {/* Left — dept icon */}
             <View style={[drow.deptIcon, missing && drow.deptIconMissing]}>
                 <Text style={[drow.deptInitial, missing && { color: Colors.screen.textMuted }]}>
                     {dept.name[0]}
                 </Text>
             </View>
+
+            {/* Center — dept info */}
             <View style={drow.info}>
                 <Text style={drow.deptName}>{dept.name}</Text>
                 {recipe ? (
@@ -161,7 +329,7 @@ function DeptRow({
                 )}
             </View>
 
-            {/* Right — status or missing */}
+            {/* Right — status badge or missing badge */}
             {missing ? (
                 <View style={drow.missingBadge}>
                     <Ionicons name="alert-circle-outline" size={13} color={Colors.status.error} />
@@ -174,7 +342,18 @@ function DeptRow({
                 </View>
             )}
 
-            {/* Quick approve for pending */}
+            {/* Cash button — only when missing */}
+            {missing && (
+                <TouchableOpacity
+                    style={drow.cashBtn}
+                    onPress={(e) => { e.stopPropagation?.(); onCashPayment(dept); }}
+                    activeOpacity={0.8}
+                >
+                    <Ionicons name="cash-outline" size={15} color="#16A34A" />
+                </TouchableOpacity>
+            )}
+
+            {/* Quick approve — only for pending uploads */}
             {isPending && (
                 <TouchableOpacity
                     style={drow.approveBtn}
@@ -390,6 +569,7 @@ export default function AdminRecipesScreen() {
     const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [validatingId, setValidatingId] = useState<number | null>(null);
+    const [cashTarget, setCashTarget] = useState<Department | null>(null);
 
     const selectedYear = new Date().getFullYear();
 
@@ -445,6 +625,37 @@ export default function AdminRecipesScreen() {
         setValidatingId(id);
         await validateRecipe(id, validated);
         setValidatingId(null);
+    };
+
+    // ── Register cash payment — inserts a new recipe pre-approved ─────────────
+    const handleCashPayment = async (
+        depId: number,
+        month: string,
+        year: number,
+        amount: number
+    ) => {
+        try {
+            const { error: dbError } = await supabase
+                .from("recipes")
+                .insert([{
+                    dep_id: depId,
+                    month,
+                    year,
+                    amount,
+                    img: null,
+                    validated: true,   // aprobado directo
+                }]);
+
+            if (dbError) {
+                Alert.alert("Error", "No se pudo registrar el pago. Intenta de nuevo.");
+                return;
+            }
+
+            // Refrescar la lista para reflejar el nuevo registro
+            await fetchAllRecipes(selectedYear);
+        } catch {
+            Alert.alert("Error", "No se pudo conectar al servidor.");
+        }
     };
 
     // ─── Render ───────────────────────────────────────────────────────────────
@@ -545,6 +756,7 @@ export default function AdminRecipesScreen() {
                                         onValidate={handleValidate}
                                         onViewImage={setViewingImage}
                                         onViewReceipt={setSelectedRecipe}
+                                        onCashPayment={setCashTarget}
                                     />
                                 </View>
                             );
@@ -562,6 +774,17 @@ export default function AdminRecipesScreen() {
                     deptName={getDeptName(selectedRecipe.dep_id)}
                     onClose={() => setSelectedRecipe(null)}
                     onValidate={handleValidate}
+                />
+            )}
+
+            {/* Cash Payment Modal */}
+            {cashTarget && (
+                <CashPaymentModal
+                    dept={cashTarget}
+                    month={selectedMonth.month}
+                    year={selectedMonth.year}
+                    onClose={() => setCashTarget(null)}
+                    onConfirm={handleCashPayment}
                 />
             )}
 
@@ -680,6 +903,11 @@ const drow = StyleSheet.create({
         flexShrink: 0,
     },
     missingText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: Colors.status.error },
+    cashBtn: {
+        width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+        backgroundColor: "#F0FDF4", borderWidth: 1, borderColor: "#BBF7D0",
+        alignItems: "center", justifyContent: "center", marginLeft: 4,
+    },
     approveBtn: {
         width: 32, height: 32, borderRadius: 10, flexShrink: 0,
         backgroundColor: Colors.status.successBg, borderWidth: 1, borderColor: Colors.status.successBorder,
@@ -813,4 +1041,119 @@ const viewer = StyleSheet.create({
         alignItems: "center", justifyContent: "center",
     },
     img: { width: "92%", height: "75%" },
+});
+
+// Cash Payment Modal
+const cash = StyleSheet.create({
+    overlay: {
+        flex: 1, justifyContent: "flex-end",
+        backgroundColor: "rgba(0,0,0,0.45)",
+    },
+    sheet: {
+        backgroundColor: Colors.screen.card,
+        borderTopLeftRadius: 26, borderTopRightRadius: 26,
+        paddingHorizontal: 20, paddingBottom: 36,
+        borderTopWidth: 1, borderTopColor: Colors.screen.border,
+    },
+    handle: {
+        width: 36, height: 4, borderRadius: 2,
+        backgroundColor: Colors.screen.border,
+        alignSelf: "center", marginTop: 12, marginBottom: 18,
+    },
+    header: {
+        flexDirection: "row", alignItems: "center",
+        gap: 12, marginBottom: 16,
+    },
+    headerIconWrap: {
+        width: 44, height: 44, borderRadius: 13,
+        backgroundColor: "#F0FDF4", borderWidth: 1.5, borderColor: "#BBF7D0",
+        alignItems: "center", justifyContent: "center", flexShrink: 0,
+    },
+    headerTitle: {
+        fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary,
+    },
+    headerSub: {
+        fontFamily: "Outfit_400Regular", fontSize: 11,
+        color: Colors.screen.textMuted, marginTop: 1,
+    },
+    closeBtn: {
+        width: 32, height: 32, borderRadius: 10,
+        backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
+        alignItems: "center", justifyContent: "center",
+    },
+    infoRow: {
+        flexDirection: "row", gap: 8, marginBottom: 16,
+    },
+    infoPill: {
+        flexDirection: "row", alignItems: "center", gap: 6,
+        flex: 1, paddingHorizontal: 12, paddingVertical: 9,
+        backgroundColor: Colors.primary.soft, borderRadius: 12,
+        borderWidth: 1, borderColor: Colors.primary.muted,
+    },
+    infoPillText: {
+        fontFamily: "Outfit_600SemiBold", fontSize: 12,
+        color: Colors.primary.dark, flex: 1,
+    },
+    divider: {
+        height: 1, backgroundColor: Colors.screen.border, marginBottom: 18,
+    },
+    fieldWrap: { marginBottom: 14 },
+    fieldLabel: {
+        fontFamily: "Outfit_700Bold", fontSize: 11,
+        color: Colors.screen.textSecondary, letterSpacing: 1.2,
+        textTransform: "uppercase", marginBottom: 8,
+    },
+    inputRow: {
+        flexDirection: "row", alignItems: "center",
+        height: 60, borderRadius: 14,
+        borderWidth: 2, borderColor: "#16A34A",
+        backgroundColor: "#F0FDF4",
+        paddingHorizontal: 16, gap: 6,
+    },
+    inputRowError: {
+        borderColor: Colors.status.error, backgroundColor: Colors.status.errorBg,
+    },
+    currencySymbol: {
+        fontFamily: "Outfit_800ExtraBold", fontSize: 26,
+        color: "#16A34A",
+    },
+    input: {
+        flex: 1, fontFamily: "Outfit_800ExtraBold",
+        fontSize: 30, color: Colors.screen.textPrimary,
+    },
+    errorRow: {
+        flexDirection: "row", alignItems: "center",
+        gap: 4, marginTop: 6,
+    },
+    errorText: {
+        fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.error,
+    },
+    notice: {
+        flexDirection: "row", alignItems: "flex-start", gap: 8,
+        backgroundColor: Colors.primary.soft, borderRadius: 10,
+        borderWidth: 1, borderColor: Colors.primary.muted,
+        paddingHorizontal: 12, paddingVertical: 10, marginBottom: 20,
+    },
+    noticeText: {
+        flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12,
+        color: Colors.primary.dark, lineHeight: 17,
+    },
+    actions: { flexDirection: "row", gap: 10 },
+    cancelBtn: {
+        flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center",
+        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
+    },
+    cancelText: {
+        fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary,
+    },
+    confirmBtn: {
+        flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center",
+        gap: 8, paddingVertical: 14, borderRadius: 12,
+        backgroundColor: "#16A34A",
+        shadowColor: "#16A34A", shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
+    },
+    confirmText: {
+        fontFamily: "Outfit_700Bold", fontSize: 15, color: "#fff",
+    },
 });
