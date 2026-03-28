@@ -6,11 +6,10 @@ export interface Recipe {
     year: number;
     month: string;
     img: string | null;
-    usr_id: number;
+    dep_id: number;
     validated: boolean | null;
     amount: number;
     // joins
-    users?: { name: string; ap: string; am: string; dep_id: number } | null;
     departments?: { name: string } | null;
 }
 
@@ -18,8 +17,8 @@ export interface CreateRecipePayload {
     year: number;
     month: string;
     img: string | null;
-    usr_id: number;
-    validated: boolean | null; // null = pendiente, true = aprobado, false = rechazado
+    dep_id: number;
+    validated: boolean | null;
     amount: number;
 }
 
@@ -49,15 +48,15 @@ export function useRecipes() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // ── Fetch del usuario actual ─────────────────────────────────────────────
-    const fetchMyRecipes = async (userId: number) => {
+    // ── Fetch del departamento del usuario actual ─────────────────────────────
+    const fetchMyRecipes = async (depId: number) => {
         setIsLoading(true);
         setError(null);
         try {
             const { data, error: dbError } = await supabase
                 .from("recipes")
-                .select("*")
-                .eq("usr_id", userId)
+                .select("*, departments ( name )")
+                .eq("dep_id", depId)
                 .order("year", { ascending: false });
 
             if (dbError) { setError("Error al cargar los comprobantes."); return; }
@@ -76,11 +75,7 @@ export function useRecipes() {
         try {
             let query = supabase
                 .from("recipes")
-                .select(`
-                    *,
-                    users ( name, ap, am, dep_id ),
-                    departments: users ( departments ( name ) )
-                `)
+                .select("*, departments ( name )")
                 .order("year", { ascending: false });
 
             if (year) query = query.eq("year", year);
