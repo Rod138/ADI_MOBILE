@@ -2,6 +2,7 @@ import InputField from "@/components/InputField";
 import PrimaryButton from "@/components/PrimaryButton";
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
+import { useMonthlyQuota } from "@/hooks/useMonthlyQuota";
 import { MONTH_ORDER, MONTHS, useRecipes, type Recipe } from "@/hooks/useRecipes";
 import { uploadFile } from "@/lib/cloudinary";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,7 +26,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+//  Helpers 
 
 function getValidationStyle(validated: boolean | null) {
     if (validated === true)
@@ -35,10 +36,12 @@ function getValidationStyle(validated: boolean | null) {
     return { color: Colors.status.warning, bg: Colors.status.warningBg, border: Colors.status.warningBorder, icon: "time" as const, label: "Pendiente" };
 }
 
+function formatCurrency(n: number) {
+    return `$${Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = [CURRENT_YEAR];
-
-// ── Tipo de archivo adjunto ───────────────────────────────────────────────────
 
 interface AttachedFile {
     uri: string;
@@ -46,7 +49,7 @@ interface AttachedFile {
     type: "image" | "pdf";
 }
 
-// ── Receipt Card ──────────────────────────────────────────────────────────────
+//  Receipt Card 
 
 function ReceiptCard({
     item,
@@ -59,6 +62,7 @@ function ReceiptCard({
 }) {
     const vs = getValidationStyle(item.validated ?? null);
     const isPdf = item.img?.toLowerCase().includes(".pdf") || item.img?.includes("/raw/");
+    const isPartial = item.amount_paid < item.amount_expected;
 
     return (
         <View style={card.root}>
@@ -73,12 +77,10 @@ function ReceiptCard({
                                 {item.month} {item.year}
                             </Text>
                         </View>
-                        {item.amount != null && (
-                            <View style={[card.monthBadge, { backgroundColor: Colors.screen.bg, borderColor: Colors.screen.border }]}>
-                                <Ionicons name="cash-outline" size={14} color={Colors.screen.textSecondary} />
-                                <Text style={[card.monthText, { color: Colors.screen.textSecondary }]}>
-                                    ${Number(item.amount).toFixed(2)}
-                                </Text>
+                        {isPartial && (
+                            <View style={[card.monthBadge, { backgroundColor: Colors.status.warningBg, borderColor: Colors.status.warningBorder }]}>
+                                <Ionicons name="pie-chart-outline" size={12} color={Colors.status.warning} />
+                                <Text style={[card.monthText, { color: Colors.status.warning, fontSize: 10 }]}>Parcial</Text>
                             </View>
                         )}
                     </View>
@@ -88,7 +90,35 @@ function ReceiptCard({
                     </View>
                 </View>
 
-                {/* Archivo adjunto */}
+                {/* Montos */}
+                <View style={card.amountsRow}>
+                    <View style={card.amountItem}>
+                        <Text style={card.amountLabel}>PAGADO</Text>
+                        <Text style={[card.amountValue, { color: Colors.primary.dark }]}>
+                            {formatCurrency(item.amount_paid)}
+                        </Text>
+                    </View>
+                    <View style={card.amountDivider} />
+                    <View style={card.amountItem}>
+                        <Text style={card.amountLabel}>ESPERADO</Text>
+                        <Text style={[card.amountValue, { color: Colors.screen.textSecondary }]}>
+                            {formatCurrency(item.amount_expected)}
+                        </Text>
+                    </View>
+                    {isPartial && (
+                        <>
+                            <View style={card.amountDivider} />
+                            <View style={card.amountItem}>
+                                <Text style={card.amountLabel}>PENDIENTE</Text>
+                                <Text style={[card.amountValue, { color: Colors.status.error, fontSize: 13 }]}>
+                                    {formatCurrency(item.amount_expected - item.amount_paid)}
+                                </Text>
+                            </View>
+                        </>
+                    )}
+                </View>
+
+                {/* Comprobante */}
                 {item.img ? (
                     isPdf ? (
                         <TouchableOpacity
@@ -116,8 +146,8 @@ function ReceiptCard({
                     )
                 ) : (
                     <View style={card.noImg}>
-                        <Ionicons name="document-outline" size={20} color={Colors.screen.textMuted} />
-                        <Text style={card.noImgText}>Sin imagen adjunta</Text>
+                        <Ionicons name="cash-outline" size={18} color={Colors.screen.textMuted} />
+                        <Text style={card.noImgText}>Pago en efectivo registrado por admin</Text>
                     </View>
                 )}
 
@@ -133,7 +163,7 @@ function ReceiptCard({
     );
 }
 
-// ── Month Picker ──────────────────────────────────────────────────────────────
+//  Month Picker 
 
 function MonthPicker({ value, year, onSelectMonth, onSelectYear, error, approvedMonths }: {
     value: string;
@@ -170,7 +200,6 @@ function MonthPicker({ value, year, onSelectMonth, onSelectYear, error, approved
                     <View style={mp.sheet}>
                         <View style={mp.handle} />
                         <Text style={mp.sheetTitle}>Selecciona período</Text>
-
                         <View style={mp.yearRow}>
                             {YEARS.map(y => (
                                 <TouchableOpacity
@@ -183,7 +212,6 @@ function MonthPicker({ value, year, onSelectMonth, onSelectYear, error, approved
                                 </TouchableOpacity>
                             ))}
                         </View>
-
                         <View style={mp.monthGrid}>
                             {MONTHS.map(m => {
                                 const isApproved = approvedMonths.has(`${m.value}-${year}`);
@@ -217,7 +245,6 @@ function MonthPicker({ value, year, onSelectMonth, onSelectYear, error, approved
                                 );
                             })}
                         </View>
-
                         <TouchableOpacity style={mp.cancelBtn} onPress={() => setOpen(false)}>
                             <Text style={mp.cancelText}>Cancelar</Text>
                         </TouchableOpacity>
@@ -228,7 +255,7 @@ function MonthPicker({ value, year, onSelectMonth, onSelectYear, error, approved
     );
 }
 
-// ── Image Viewer Modal ────────────────────────────────────────────────────────
+//  Image Viewer 
 
 function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
     return (
@@ -243,7 +270,7 @@ function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
     );
 }
 
-// ── Upload Form ───────────────────────────────────────────────────────────────
+//  Upload Form 
 
 function UploadForm({
     depId,
@@ -257,12 +284,31 @@ function UploadForm({
     onSuccess: () => void;
 }) {
     const { createRecipe, isLoading } = useRecipes();
+    const { fetchQuota } = useMonthlyQuota();
+
     const [month, setMonth] = useState("");
     const [year, setYear] = useState(CURRENT_YEAR);
     const [amount, setAmount] = useState("");
+    const [amountExpected, setAmountExpected] = useState(0);
     const [file, setFile] = useState<AttachedFile | null>(null);
     const [uploading, setUploading] = useState(false);
+    const [loadingQuota, setLoadingQuota] = useState(false);
     const [errors, setErrors] = useState<{ month?: string; file?: string; amount?: string }>({});
+
+    // Cuando cambia el mes, intentar pre-llenar con la cuota configurada
+    const handleMonthSelect = async (m: string) => {
+        setMonth(m);
+        setErrors(p => ({ ...p, month: undefined }));
+        setLoadingQuota(true);
+        const q = await fetchQuota(m, year);
+        setLoadingQuota(false);
+        if (q) {
+            setAmount(String(q.amount));
+            setAmountExpected(q.amount);
+        } else {
+            setAmountExpected(0);
+        }
+    };
 
     const pickImage = async () => {
         const p = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -315,19 +361,14 @@ function UploadForm({
         if (!month) {
             e.month = "Selecciona el mes de la cuota.";
         } else if (approvedMonths.has(`${month}-${year}`)) {
-            e.month = "La cuota de este mes ya fue aprobada. No es necesario subir otro comprobante.";
-        } else if (existingMonths.has(`${month}-${year}`)) {
-            e.month = "Ya tienes un comprobante pendiente para este mes.";
+            e.month = "La cuota de este mes ya fue aprobada.";
         }
-
         if (!amount.trim()) {
-            e.amount = "Introduce el monto de la cuota.";
+            e.amount = "Introduce el monto que estás pagando.";
         } else {
             const parsed = parseInt(amount, 10);
-            if (isNaN(parsed) || parsed <= 0) e.amount = "El monto debe ser numérico y mayor a 0.";
-            else if (amount.length > 4) e.amount = "Máximo 4 dígitos.";
+            if (isNaN(parsed) || parsed <= 0) e.amount = "El monto debe ser mayor a 0.";
         }
-
         if (!file) e.file = "Adjunta el comprobante (imagen o PDF).";
         setErrors(e);
         return Object.keys(e).length === 0;
@@ -340,19 +381,21 @@ function UploadForm({
         try {
             fileUrl = (await uploadFile(file!.uri, "comprobantes")).url;
         } catch (err: any) {
-            Alert.alert("Error al subir", err?.message ?? "No se pudo subir el archivo. Intenta de nuevo.");
+            Alert.alert("Error al subir", err?.message ?? "No se pudo subir el archivo.");
             setUploading(false);
             return;
         }
         setUploading(false);
 
+        const parsedAmount = parseFloat(amount.replace(/,/g, ""));
         const ok = await createRecipe({
+            dep_id: depId,
             year,
             month,
+            amount_paid: parsedAmount,
+            amount_expected: amountExpected > 0 ? amountExpected : parsedAmount,
             img: fileUrl,
-            dep_id: depId,
             validated: null,
-            amount: parseFloat(amount.replace(/,/g, "")),
         });
 
         if (ok) {
@@ -377,19 +420,43 @@ function UploadForm({
 
             <MonthPicker
                 value={month} year={year}
-                onSelectMonth={(m) => { setMonth(m); setErrors(p => ({ ...p, month: undefined })); }}
+                onSelectMonth={handleMonthSelect}
                 onSelectYear={setYear}
                 error={errors.month}
                 approvedMonths={approvedMonths}
             />
 
+            {/* Cuota esperada (informativo) */}
+            {month && !loadingQuota && amountExpected > 0 && (
+                <View style={form.quotaNote}>
+                    <Ionicons name="information-circle-outline" size={14} color="#0891B2" />
+                    <Text style={form.quotaNoteText}>
+                        Cuota esperada para {month}: <Text style={{ fontFamily: "Outfit_700Bold" }}>{formatCurrency(amountExpected)}</Text>
+                    </Text>
+                </View>
+            )}
+            {month && !loadingQuota && amountExpected === 0 && (
+                <View style={[form.quotaNote, { backgroundColor: Colors.status.warningBg, borderColor: Colors.status.warningBorder }]}>
+                    <Ionicons name="alert-circle-outline" size={14} color={Colors.status.warning} />
+                    <Text style={[form.quotaNoteText, { color: Colors.status.warning }]}>
+                        El admin no ha configurado la cuota para {month}. Puedes subir el comprobante de todos modos.
+                    </Text>
+                </View>
+            )}
+            {loadingQuota && (
+                <View style={form.loadingRow}>
+                    <ActivityIndicator size="small" color={Colors.primary.main} />
+                    <Text style={form.loadingText}>Consultando cuota del mes...</Text>
+                </View>
+            )}
+
             <View style={form.field}>
                 <InputField
-                    label="MONTO DE LA CUOTA"
+                    label="MONTO QUE ESTÁS PAGANDO"
                     placeholder="Ej. 1500"
                     keyboardType="numeric"
                     leftIcon="cash-outline"
-                    maxLength={4}
+                    maxLength={8}
                     value={amount}
                     onChangeText={(val) => {
                         setAmount(val.replace(/[^0-9]/g, ""));
@@ -427,10 +494,8 @@ function UploadForm({
                         onPress={showFileOptions}
                         activeOpacity={0.8}
                     >
-                        <Ionicons
-                            name="attach-outline" size={30}
-                            color={errors.file ? Colors.status.error : Colors.screen.iconMuted}
-                        />
+                        <Ionicons name="attach-outline" size={30}
+                            color={errors.file ? Colors.status.error : Colors.screen.iconMuted} />
                         <Text style={[form.imgPickerText, errors.file && { color: Colors.status.error }]}>
                             Toca para adjuntar el comprobante
                         </Text>
@@ -459,7 +524,7 @@ function UploadForm({
     );
 }
 
-// ── Main Screen ───────────────────────────────────────────────────────────────
+//  Main Screen 
 
 export default function RecipesScreen() {
     const { user } = useSession();
@@ -468,7 +533,6 @@ export default function RecipesScreen() {
     const [showForm, setShowForm] = useState(false);
     const formHeight = useRef(new Animated.Value(0)).current;
 
-    // dep_id viene del usuario en sesión
     const depId = user?.dep_id;
 
     useEffect(() => {
@@ -504,35 +568,39 @@ export default function RecipesScreen() {
         ]);
     };
 
-    // Meses con comprobante YA APROBADO → bloqueo total, no se puede volver a subir
+    // Meses con comprobante aprobado (bloqueo total)
     const approvedMonths = new Set(
-        recipes
-            .filter(r => r.validated === true)
-            .map(r => `${r.month}-${r.year}`)
+        recipes.filter(r => r.validated === true).map(r => `${r.month}-${r.year}`)
     );
-
-    // Meses con comprobante pendiente o rechazado → ya existe uno, pero se puede reemplazar
     const existingMonths = new Set(
-        recipes
-            .filter(r => r.validated !== true)
-            .map(r => `${r.month}-${r.year}`)
+        recipes.filter(r => r.validated !== true).map(r => `${r.month}-${r.year}`)
     );
 
-    // El mes actual ya está cubierto si tiene un comprobante aprobado
     const currentMonthKey = (() => {
         const now = new Date();
-        const MONTH_NAMES = [
-            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-        ];
-        return `${MONTH_NAMES[now.getMonth()]}-${now.getFullYear()}`;
+        const names = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+        return `${names[now.getMonth()]}-${now.getFullYear()}`;
     })();
     const currentMonthApproved = approvedMonths.has(currentMonthKey);
 
     const sorted = [...recipes].sort((a, b) => {
         if (a.year !== b.year) return b.year - a.year;
-        return (MONTH_ORDER[b.month] ?? 0) - (MONTH_ORDER[a.month] ?? 0);
+        if (a.month !== b.month) return (MONTH_ORDER[b.month] ?? 0) - (MONTH_ORDER[a.month] ?? 0);
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
+
+    // Agrupar pagos por mes para mostrar totales
+    const monthTotals = new Map<string, { paid: number; expected: number; count: number }>();
+    for (const r of recipes) {
+        const key = `${r.month}-${r.year}`;
+        const existing = monthTotals.get(key) ?? { paid: 0, expected: r.amount_expected, count: 0 };
+        monthTotals.set(key, {
+            paid: existing.paid + (r.validated !== false ? r.amount_paid : 0),
+            expected: r.amount_expected,
+            count: existing.count + 1,
+        });
+    }
 
     return (
         <View style={styles.root}>
@@ -566,13 +634,7 @@ export default function RecipesScreen() {
                         <Ionicons
                             name={showForm ? "close" : currentMonthApproved ? "checkmark-circle" : "add"}
                             size={18}
-                            color={
-                                showForm
-                                    ? Colors.status.error
-                                    : currentMonthApproved
-                                        ? Colors.status.success
-                                        : Colors.primary.dark
-                            }
+                            color={showForm ? Colors.status.error : currentMonthApproved ? Colors.status.success : Colors.primary.dark}
                         />
                         <Text style={[
                             styles.uploadBtnText,
@@ -600,7 +662,7 @@ export default function RecipesScreen() {
                         </Animated.View>
                     )}
 
-                    {/* Banner: mes actual ya cubierto */}
+                    {/* Banner: mes actual cubierto */}
                     {currentMonthApproved && !showForm && (
                         <View style={styles.approvedBanner}>
                             <View style={styles.approvedBannerIcon}>
@@ -632,8 +694,7 @@ export default function RecipesScreen() {
                             </View>
                             <Text style={styles.emptyTitle}>Sin comprobantes</Text>
                             <Text style={styles.emptyText}>
-                                No has subido ningún comprobante.{"\n"}
-                                Toca "Subir" para agregar uno.
+                                No has subido ningún comprobante.{"\n"}Toca "Subir" para agregar uno.
                             </Text>
                         </View>
                     ) : (
@@ -656,8 +717,6 @@ export default function RecipesScreen() {
     );
 }
 
-// ── Estilos ───────────────────────────────────────────────────────────────────
-
 const card = StyleSheet.create({
     root: {
         backgroundColor: Colors.screen.card, borderRadius: 16,
@@ -673,12 +732,24 @@ const card = StyleSheet.create({
         flexDirection: "row", alignItems: "center", gap: 5,
         paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1,
     },
-    monthText: { fontFamily: "Outfit_700Bold", fontSize: 14 },
+    monthText: { fontFamily: "Outfit_700Bold", fontSize: 13 },
     statusBadge: {
         flexDirection: "row", alignItems: "center", gap: 4,
         paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1,
     },
     statusText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
+    amountsRow: {
+        flexDirection: "row", alignItems: "center",
+        backgroundColor: Colors.screen.bg, borderRadius: 10,
+        borderWidth: 1, borderColor: Colors.screen.border, overflow: "hidden",
+    },
+    amountItem: { flex: 1, alignItems: "center", paddingVertical: 10 },
+    amountDivider: { width: 1, height: 36, backgroundColor: Colors.screen.border },
+    amountLabel: {
+        fontFamily: "Outfit_700Bold", fontSize: 9,
+        color: Colors.screen.textMuted, letterSpacing: 1.2, marginBottom: 3,
+    },
+    amountValue: { fontFamily: "Outfit_700Bold", fontSize: 14 },
     img: { width: "100%", height: 180, borderRadius: 10, marginTop: 4 },
     imgOverlay: {
         position: "absolute", bottom: 4, right: 0, left: 0,
@@ -702,11 +773,11 @@ const card = StyleSheet.create({
     pdfLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.screen.textPrimary },
     pdfHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
     noImg: {
-        height: 60, borderRadius: 10, borderWidth: 1.5,
+        height: 56, borderRadius: 10, borderWidth: 1.5,
         borderColor: Colors.screen.border, borderStyle: "dashed",
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     },
-    noImgText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: Colors.screen.textMuted },
+    noImgText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted },
     deleteBtn: {
         flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-end",
         paddingHorizontal: 8, paddingVertical: 4,
@@ -731,6 +802,14 @@ const form = StyleSheet.create({
     },
     headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: Colors.screen.textPrimary },
     headerSubtitle: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 1 },
+    quotaNote: {
+        flexDirection: "row", alignItems: "flex-start", gap: 8,
+        backgroundColor: "#F0F9FF", borderWidth: 1, borderColor: "#BAE6FD",
+        borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 14,
+    },
+    quotaNoteText: {
+        flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: "#0C4A6E", lineHeight: 17,
+    },
     field: { marginBottom: 18 },
     fieldLabel: {
         fontFamily: "Outfit_700Bold", fontSize: 11,
@@ -842,7 +921,6 @@ const viewer = StyleSheet.create({
     },
     img: { width: "92%", height: "75%" },
 });
-
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
     header: {
@@ -894,9 +972,7 @@ const styles = StyleSheet.create({
         backgroundColor: "#fff", borderWidth: 1, borderColor: Colors.status.successBorder,
         alignItems: "center", justifyContent: "center", flexShrink: 0,
     },
-    approvedBannerTitle: {
-        fontFamily: "Outfit_700Bold", fontSize: 13, color: Colors.status.success,
-    },
+    approvedBannerTitle: { fontFamily: "Outfit_700Bold", fontSize: 13, color: Colors.status.success },
     approvedBannerSub: {
         fontFamily: "Outfit_400Regular", fontSize: 12,
         color: Colors.status.success, opacity: 0.8, marginTop: 2, lineHeight: 17,

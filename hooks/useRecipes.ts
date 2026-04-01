@@ -3,23 +3,25 @@ import { useState } from "react";
 
 export interface Recipe {
     id: number;
+    dep_id: number;
     year: number;
     month: string;
+    amount_paid: number;
+    amount_expected: number;
     img: string | null;
-    dep_id: number;
     validated: boolean | null;
-    amount: number;
-    // joins
+    created_at: string;
     departments?: { name: string } | null;
 }
 
 export interface CreateRecipePayload {
+    dep_id: number;
     year: number;
     month: string;
+    amount_paid: number;
+    amount_expected: number;
     img: string | null;
-    dep_id: number;
     validated: boolean | null;
-    amount: number;
 }
 
 export const MONTHS = [
@@ -48,16 +50,17 @@ export function useRecipes() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // ── Fetch del departamento del usuario actual ─────────────────────────────
+    // ── Fetch del departamento del usuario actual 
     const fetchMyRecipes = async (depId: number) => {
         setIsLoading(true);
         setError(null);
         try {
             const { data, error: dbError } = await supabase
-                .from("recipes")
+                .from("recipes_payment")
                 .select("*, departments ( name )")
                 .eq("dep_id", depId)
-                .order("year", { ascending: false });
+                .order("year", { ascending: false })
+                .order("created_at", { ascending: false });
 
             if (dbError) { setError("Error al cargar los comprobantes."); return; }
             setRecipes((data as Recipe[]) ?? []);
@@ -68,15 +71,16 @@ export function useRecipes() {
         }
     };
 
-    // ── Fetch de todos (admin/tesorero) ──────────────────────────────────────
+    // ── Fetch de todos (admin/tesorero) 
     const fetchAllRecipes = async (year?: number) => {
         setIsLoading(true);
         setError(null);
         try {
             let query = supabase
-                .from("recipes")
+                .from("recipes_payment")
                 .select("*, departments ( name )")
-                .order("year", { ascending: false });
+                .order("year", { ascending: false })
+                .order("created_at", { ascending: false });
 
             if (year) query = query.eq("year", year);
 
@@ -90,14 +94,14 @@ export function useRecipes() {
         }
     };
 
-    // ── Crear comprobante ────────────────────────────────────────────────────
+    // ── Crear comprobante / pago 
     const createRecipe = async (payload: CreateRecipePayload): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
         try {
             const { error: dbError } = await supabase
-                .from("recipes")
-                .insert([payload]);
+                .from("recipes_payment")
+                .insert([{ ...payload, created_at: new Date().toISOString() }]);
 
             if (dbError) {
                 console.error("Error Supabase createRecipe:", dbError.message, dbError.details);
@@ -114,13 +118,13 @@ export function useRecipes() {
         }
     };
 
-    // ── Validar (aprobar / rechazar) ─────────────────────────────────────────
+    // ── Validar (aprobar / rechazar) 
     const validateRecipe = async (id: number, validated: boolean): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
         try {
             const { error: dbError } = await supabase
-                .from("recipes")
+                .from("recipes_payment")
                 .update({ validated })
                 .eq("id", id);
 
@@ -138,13 +142,13 @@ export function useRecipes() {
         }
     };
 
-    // ── Eliminar ─────────────────────────────────────────────────────────────
+    // ── Eliminar 
     const deleteRecipe = async (id: number): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
         try {
             const { error: dbError } = await supabase
-                .from("recipes")
+                .from("recipes_payment")
                 .delete()
                 .eq("id", id);
 

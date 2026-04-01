@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// ── Module Card ───────────────────────────────────────────────────────────────
+// Module Card
 
 function ModuleCard({
     icon,
@@ -98,14 +98,13 @@ function ModuleCard({
     );
 }
 
-// ── Pantalla ──────────────────────────────────────────────────────────────────
+// Pantalla
 
 export default function FinanceScreen() {
     const { user } = useSession();
     const { recipes, fetchMyRecipes } = useRecipes();
 
-    // Rol 1 = Residente (solo lectura), 2+ = Tesorero/Admin (puede gestionar)
-    const canManageExpenses = (user?.rol_id ?? 0) >= 2;
+    const canManage = (user?.rol_id ?? 0) >= 2;
 
     useEffect(() => {
         if (user) fetchMyRecipes(user.dep_id);
@@ -137,11 +136,22 @@ export default function FinanceScreen() {
                     contentContainerStyle={styles.scroll}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* ── DISPONIBLE AHORA ─────────────────────────────── */}
+                    {/* DISPONIBLE AHORA */}
                     <View style={styles.sectionLabel}>
                         <Text style={styles.sectionLabelText}>DISPONIBLE AHORA</Text>
                         <View style={styles.sectionLabelLine} />
                     </View>
+
+                    {/* Estado de cuenta — AHORA ACTIVO */}
+                    <ModuleCard
+                        icon="bar-chart-outline"
+                        title="Estado de cuenta"
+                        description="Balance general del condominio con historial de movimientos por mes o rango de fechas."
+                        accentColor="#7C3AED"
+                        accentBg="#F5F3FF"
+                        accentBorder="#DDD6FE"
+                        onPress={() => router.push("/(finance)/balance" as any)}
+                    />
 
                     {/* Cuotas — visible para todos */}
                     <ModuleCard
@@ -154,24 +164,24 @@ export default function FinanceScreen() {
                         onPress={() => router.push("/(finance)/recipes" as any)}
                     />
 
-                    {/* Gastos — visible para TODOS, gestión solo admin/tesorero */}
+                    {/* Gastos */}
                     <ModuleCard
                         icon="trending-down-outline"
                         title="Gastos del condominio"
                         description={
-                            canManageExpenses
+                            canManage
                                 ? "Registra y consulta los egresos del condominio con evidencia fotográfica."
                                 : "Consulta los egresos del condominio registrados por la administración."
                         }
                         accentColor={Colors.secondary.main}
                         accentBg={Colors.secondary.soft}
                         accentBorder="#FED7AA"
-                        roleTag={canManageExpenses ? "Admin / Tesorero" : undefined}
+                        roleTag={canManage ? "Admin / Tesorero" : undefined}
                         onPress={() => router.push("/(finance)/expenses" as any)}
                     />
 
                     {/* Tablón de cuotas — solo admin/tesorero */}
-                    {canManageExpenses && (
+                    {canManage && (
                         <ModuleCard
                             icon="people-outline"
                             title="Cuotas de residentes"
@@ -184,21 +194,25 @@ export default function FinanceScreen() {
                         />
                     )}
 
-                    {/* ── EN DESARROLLO ────────────────────────────────── */}
+                    {/* Cuota mensual — solo admin/tesorero */}
+                    {canManage && (
+                        <ModuleCard
+                            icon="calculator-outline"
+                            title="Cuota mensual"
+                            description="Define o actualiza el monto de la cuota de mantenimiento para cada mes."
+                            accentColor="#0891B2"
+                            accentBg="#F0F9FF"
+                            accentBorder="#BAE6FD"
+                            roleTag="Admin / Tesorero"
+                            onPress={() => router.push("/(finance)/admin-quota" as any)}
+                        />
+                    )}
+
+                    {/* EN DESARROLLO */}
                     <View style={styles.sectionLabel}>
                         <Text style={styles.sectionLabelText}>EN DESARROLLO</Text>
                         <View style={styles.sectionLabelLine} />
                     </View>
-
-                    <ModuleCard
-                        icon="bar-chart-outline"
-                        title="Estado de cuenta"
-                        description="Balance general del condominio con historial de movimientos."
-                        accentColor={Colors.screen.textMuted}
-                        accentBg={Colors.neutral[100]}
-                        accentBorder={Colors.screen.border}
-                        soon
-                    />
 
                     <ModuleCard
                         icon="trending-up-outline"
@@ -234,7 +248,6 @@ export default function FinanceScreen() {
 
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
-
     header: {
         flexDirection: "row", alignItems: "center", justifyContent: "space-between",
         paddingHorizontal: 16, paddingVertical: 14,

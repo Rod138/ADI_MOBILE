@@ -26,7 +26,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+//  Tipos 
 
 interface Department {
     id: number;
@@ -34,9 +34,7 @@ interface Department {
     is_in_use: boolean;
 }
 
-type ViewMode = "board" | "list";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+//   Helpers 
 
 function formatCurrency(n: number) {
     return `$${Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
@@ -62,7 +60,6 @@ function getStatusConfig(validated: boolean | null) {
     };
 }
 
-// Genera los últimos N meses a partir del mes actual, en orden desc
 function buildMonthList(count = 6): { month: string; year: number; key: string }[] {
     const now = new Date();
     const result: { month: string; year: number; key: string }[] = [];
@@ -79,7 +76,7 @@ function buildMonthList(count = 6): { month: string; year: number; key: string }
     return result;
 }
 
-// ─── Image Viewer ─────────────────────────────────────────────────────────────
+//   Image Viewer 
 
 function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
     const fade = useRef(new Animated.Value(0)).current;
@@ -100,9 +97,7 @@ function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
 
 // ─── Month Tab ────────────────────────────────────────────────────────────────
 
-function MonthTab({
-    label, isActive, pendingCount, onPress,
-}: {
+function MonthTab({ label, isActive, pendingCount, onPress }: {
     label: string; isActive: boolean; pendingCount: number; onPress: () => void;
 }) {
     return (
@@ -123,22 +118,16 @@ function MonthTab({
     );
 }
 
-// ─── Cash Payment Modal ───────────────────────────────────────────────────────
+//   Cash Payment Modal 
 
 function CashPaymentModal({
-    dept,
-    month,
-    year,
-    onClose,
-    onConfirm,
+    dept, month, year, amountExpected, onClose, onConfirm,
 }: {
-    dept: Department;
-    month: string;
-    year: number;
+    dept: Department; month: string; year: number; amountExpected: number;
     onClose: () => void;
-    onConfirm: (depId: number, month: string, year: number, amount: number) => Promise<void>;
+    onConfirm: (depId: number, month: string, year: number, amount: number, amountExpected: number) => Promise<void>;
 }) {
-    const [amount, setAmount] = useState("");
+    const [amount, setAmount] = useState(amountExpected > 0 ? String(amountExpected) : "");
     const [amountError, setAmountError] = useState<string | undefined>();
     const [saving, setSaving] = useState(false);
 
@@ -146,7 +135,6 @@ function CashPaymentModal({
         if (!val.trim()) return "Ingresa el monto del pago.";
         const n = parseInt(val, 10);
         if (isNaN(n) || n <= 0) return "El monto debe ser mayor a 0.";
-        if (val.length > 6) return "Máximo 6 dígitos.";
         return undefined;
     };
 
@@ -157,14 +145,14 @@ function CashPaymentModal({
 
         Alert.alert(
             "Registrar pago en efectivo",
-            `¿Confirmar pago de ${dept.name} por $${amount} correspondiente a ${month} ${year}?\n\nEste registro quedará aprobado de inmediato.`,
+            `¿Confirmar pago de ${dept.name} por $${amount} para ${month} ${year}?\n\nEste registro quedará aprobado de inmediato.`,
             [
                 { text: "Cancelar", style: "cancel" },
                 {
                     text: "Confirmar",
                     onPress: async () => {
                         setSaving(true);
-                        await onConfirm(dept.id, month, year, parseInt(amount, 10));
+                        await onConfirm(dept.id, month, year, parseInt(amount, 10), amountExpected > 0 ? amountExpected : parseInt(amount, 10));
                         setSaving(false);
                         onClose();
                     },
@@ -181,10 +169,7 @@ function CashPaymentModal({
             >
                 <View style={cash.overlay}>
                     <View style={cash.sheet}>
-                        {/* Handle */}
                         <View style={cash.handle} />
-
-                        {/* Header */}
                         <View style={cash.header}>
                             <View style={cash.headerIconWrap}>
                                 <Ionicons name="cash" size={22} color="#16A34A" />
@@ -198,7 +183,6 @@ function CashPaymentModal({
                             </TouchableOpacity>
                         </View>
 
-                        {/* Info pills — dept + period (pre-filled, read-only) */}
                         <View style={cash.infoRow}>
                             <View style={cash.infoPill}>
                                 <Ionicons name="business-outline" size={13} color={Colors.primary.dark} />
@@ -210,10 +194,17 @@ function CashPaymentModal({
                             </View>
                         </View>
 
-                        {/* Divider */}
+                        {amountExpected > 0 && (
+                            <View style={cash.expectedNote}>
+                                <Ionicons name="information-circle-outline" size={13} color="#0891B2" />
+                                <Text style={cash.expectedNoteText}>
+                                    Cuota esperada: <Text style={{ fontFamily: "Outfit_700Bold" }}>{formatCurrency(amountExpected)}</Text>
+                                </Text>
+                            </View>
+                        )}
+
                         <View style={cash.divider} />
 
-                        {/* Amount input */}
                         <View style={cash.fieldWrap}>
                             <Text style={cash.fieldLabel}>MONTO RECIBIDO</Text>
                             <View style={[cash.inputRow, amountError && cash.inputRowError]}>
@@ -223,7 +214,7 @@ function CashPaymentModal({
                                     placeholder="0"
                                     placeholderTextColor={Colors.screen.textMuted}
                                     keyboardType="number-pad"
-                                    maxLength={6}
+                                    maxLength={8}
                                     value={amount}
                                     onChangeText={(v) => {
                                         setAmount(v.replace(/[^0-9]/g, ""));
@@ -247,7 +238,6 @@ function CashPaymentModal({
                             )}
                         </View>
 
-                        {/* Notice */}
                         <View style={cash.notice}>
                             <Ionicons name="information-circle-outline" size={14} color={Colors.primary.dark} />
                             <Text style={cash.noticeText}>
@@ -255,7 +245,6 @@ function CashPaymentModal({
                             </Text>
                         </View>
 
-                        {/* Actions */}
                         <View style={cash.actions}>
                             <TouchableOpacity style={cash.cancelBtn} onPress={onClose} activeOpacity={0.8}>
                                 <Text style={cash.cancelText}>Cancelar</Text>
@@ -283,66 +272,95 @@ function CashPaymentModal({
     );
 }
 
-// ─── Dept Row (board view) ────────────────────────────────────────────────────
+//   Dept Row 
+
+interface DeptPaymentSummary {
+    totalPaid: number;
+    expected: number;
+    payments: Recipe[];
+    isPartial: boolean;
+    latestRecipe: Recipe | null;
+}
 
 function DeptRow({
     dept,
-    recipe,
+    summary,
     onValidate,
-    onViewImage,
     onViewReceipt,
     onCashPayment,
 }: {
     dept: Department;
-    recipe: Recipe | null;
+    summary: DeptPaymentSummary | null;
     onValidate: (id: number, validated: boolean) => void;
-    onViewImage: (url: string) => void;
     onViewReceipt: (recipe: Recipe) => void;
     onCashPayment: (dept: Department) => void;
 }) {
-    const sc = recipe ? getStatusConfig(recipe.validated ?? null) : null;
-    const missing = !recipe;
-    const isPending = recipe && (recipe.validated === null || recipe.validated === undefined);
+    const missing = !summary || summary.totalPaid === 0;
+    const isPending = summary && summary.latestRecipe && (summary.latestRecipe.validated === null || summary.latestRecipe.validated === undefined);
+    const isApproved = summary && summary.latestRecipe && summary.latestRecipe.validated === true;
+    const isPartial = summary?.isPartial && isApproved;
+
+    const getStatusStyle = () => {
+        if (missing) return { bg: "#FEF2F2", border: "#FECACA" };
+        if (isPartial) return { bg: Colors.status.warningBg, border: Colors.status.warningBorder };
+        if (isApproved && !isPartial) return { bg: Colors.status.successBg, border: Colors.status.successBorder };
+        return { bg: Colors.screen.card, border: Colors.screen.border };
+    };
+
+    const statusStyle = getStatusStyle();
 
     return (
         <TouchableOpacity
-            style={[drow.root, missing && drow.rootMissing]}
-            activeOpacity={recipe ? 0.82 : 0.95}
-            onPress={() => recipe && onViewReceipt(recipe)}
+            style={[drow.root, { backgroundColor: statusStyle.bg, borderColor: statusStyle.border }]}
+            activeOpacity={summary ? 0.82 : 0.95}
+            onPress={() => summary?.latestRecipe && onViewReceipt(summary.latestRecipe)}
         >
-            {/* Left — dept icon */}
             <View style={[drow.deptIcon, missing && drow.deptIconMissing]}>
                 <Text style={[drow.deptInitial, missing && { color: Colors.screen.textMuted }]}>
                     {dept.name[0]}
                 </Text>
             </View>
 
-            {/* Center — dept info */}
             <View style={drow.info}>
                 <Text style={drow.deptName}>{dept.name}</Text>
-                {recipe ? (
-                    <Text style={drow.sub}>
-                        {recipe.amount != null ? formatCurrency(Number(recipe.amount)) : "—"}
-                    </Text>
+                {summary ? (
+                    <View style={drow.amountsRow}>
+                        <Text style={[drow.paidText, { color: isApproved ? Colors.status.success : Colors.screen.textMuted }]}>
+                            {formatCurrency(summary.totalPaid)}
+                        </Text>
+                        {summary.expected > 0 && (
+                            <Text style={drow.expectedText}> / {formatCurrency(summary.expected)}</Text>
+                        )}
+                    </View>
                 ) : (
-                    <Text style={[drow.sub, { color: Colors.status.error }]}>Sin comprobante</Text>
+                    <Text style={[drow.sub, { color: Colors.status.error }]}>Sin pago</Text>
                 )}
             </View>
 
-            {/* Right — status badge or missing badge */}
+            {/* Badges */}
             {missing ? (
                 <View style={drow.missingBadge}>
                     <Ionicons name="alert-circle-outline" size={13} color={Colors.status.error} />
                     <Text style={drow.missingText}>Falta</Text>
                 </View>
-            ) : (
-                <View style={[drow.statusPill, { backgroundColor: sc!.bg, borderColor: sc!.border }]}>
-                    <Ionicons name={sc!.icon} size={12} color={sc!.color} />
-                    <Text style={[drow.statusText, { color: sc!.color }]}>{sc!.label}</Text>
+            ) : isPartial ? (
+                <View style={drow.partialBadge}>
+                    <Ionicons name="pie-chart-outline" size={12} color={Colors.status.warning} />
+                    <Text style={drow.partialText}>Parcial</Text>
                 </View>
-            )}
+            ) : isPending ? (
+                <View style={drow.pendingBadge}>
+                    <Ionicons name="time" size={12} color={Colors.status.warning} />
+                    <Text style={drow.pendingText}>Pendiente</Text>
+                </View>
+            ) : isApproved ? (
+                <View style={drow.approvedBadge}>
+                    <Ionicons name="checkmark-circle" size={12} color={Colors.status.success} />
+                    <Text style={drow.approvedText}>OK</Text>
+                </View>
+            ) : null}
 
-            {/* Cash button — only when missing */}
+            {/* Acciones */}
             {missing && (
                 <TouchableOpacity
                     style={drow.cashBtn}
@@ -353,8 +371,7 @@ function DeptRow({
                 </TouchableOpacity>
             )}
 
-            {/* Quick approve — only for pending uploads */}
-            {isPending && (
+            {isPending && summary?.latestRecipe && (
                 <TouchableOpacity
                     style={drow.approveBtn}
                     onPress={(e) => {
@@ -364,7 +381,7 @@ function DeptRow({
                             `¿Aprobar cuota de ${dept.name}?`,
                             [
                                 { text: "Cancelar", style: "cancel" },
-                                { text: "Aprobar", onPress: () => onValidate(recipe!.id, true) },
+                                { text: "Aprobar", onPress: () => onValidate(summary.latestRecipe!.id, true) },
                             ]
                         );
                     }}
@@ -377,23 +394,19 @@ function DeptRow({
     );
 }
 
-// ─── Receipt Detail Modal ─────────────────────────────────────────────────────
+//   Receipt Detail Modal 
 
 function ReceiptModal({
-    recipe,
-    deptName,
-    onClose,
-    onValidate,
+    recipe, deptName, onClose, onValidate,
 }: {
-    recipe: Recipe;
-    deptName: string;
-    onClose: () => void;
+    recipe: Recipe; deptName: string; onClose: () => void;
     onValidate: (id: number, validated: boolean) => void;
 }) {
     const sc = getStatusConfig(recipe.validated ?? null);
     const isPdf = recipe.img?.toLowerCase().includes(".pdf") || recipe.img?.includes("/raw/");
     const isPending = recipe.validated === null || recipe.validated === undefined;
     const [viewingImg, setViewingImg] = useState(false);
+    const isPartial = recipe.amount_paid < recipe.amount_expected;
 
     const handleApprove = () => {
         Alert.alert(
@@ -421,10 +434,7 @@ function ReceiptModal({
         <Modal visible animationType="slide" transparent onRequestClose={onClose}>
             <View style={rmodal.overlay}>
                 <View style={rmodal.sheet}>
-                    {/* Handle */}
                     <View style={rmodal.handle} />
-
-                    {/* Header */}
                     <View style={rmodal.header}>
                         <View style={[rmodal.avatar, { backgroundColor: sc.bg, borderColor: sc.border }]}>
                             <Text style={[rmodal.avatarText, { color: sc.color }]}>{deptName[0]}</Text>
@@ -443,14 +453,34 @@ function ReceiptModal({
                     </View>
 
                     <ScrollView showsVerticalScrollIndicator={false}>
-                        {/* Amount */}
-                        <View style={rmodal.amountRow}>
-                            <Ionicons name="cash-outline" size={16} color={Colors.primary.main} />
-                            <Text style={rmodal.amountLabel}>Monto pagado</Text>
-                            <Text style={rmodal.amountValue}>{formatCurrency(Number(recipe.amount))}</Text>
+                        {/* Montos */}
+                        <View style={rmodal.amountsCard}>
+                            <View style={rmodal.amountItem}>
+                                <Text style={rmodal.amountItemLabel}>PAGADO</Text>
+                                <Text style={[rmodal.amountItemValue, { color: Colors.primary.dark }]}>
+                                    {formatCurrency(recipe.amount_paid)}
+                                </Text>
+                            </View>
+                            <View style={rmodal.amountDivider} />
+                            <View style={rmodal.amountItem}>
+                                <Text style={rmodal.amountItemLabel}>ESPERADO</Text>
+                                <Text style={[rmodal.amountItemValue, { color: Colors.screen.textSecondary }]}>
+                                    {formatCurrency(recipe.amount_expected)}
+                                </Text>
+                            </View>
                         </View>
 
-                        {/* Attachment */}
+                        {/* Alerta pago parcial */}
+                        {isPartial && (
+                            <View style={rmodal.partialAlert}>
+                                <Ionicons name="pie-chart-outline" size={14} color={Colors.status.warning} />
+                                <Text style={rmodal.partialAlertText}>
+                                    Pago parcial — faltan {formatCurrency(recipe.amount_expected - recipe.amount_paid)}
+                                </Text>
+                            </View>
+                        )}
+
+                        {/* Comprobante */}
                         <View style={rmodal.section}>
                             <Text style={rmodal.sectionLabel}>COMPROBANTE</Text>
                             {recipe.img ? (
@@ -480,8 +510,8 @@ function ReceiptModal({
                                 )
                             ) : (
                                 <View style={rmodal.noImg}>
-                                    <Ionicons name="image-outline" size={18} color={Colors.screen.textMuted} />
-                                    <Text style={rmodal.noImgText}>Sin comprobante adjunto</Text>
+                                    <Ionicons name="cash-outline" size={18} color={Colors.screen.textMuted} />
+                                    <Text style={rmodal.noImgText}>Pago en efectivo (sin comprobante)</Text>
                                 </View>
                             )}
                         </View>
@@ -510,36 +540,40 @@ function ReceiptModal({
     );
 }
 
-// ─── Summary Bar ──────────────────────────────────────────────────────────────
+//   Summary Bar 
 
-function SummaryBar({
-    depts, recipes,
-}: {
+function SummaryBar({ depts, recipes, amountExpected }: {
     depts: Department[];
     recipes: Recipe[];
+    amountExpected: number;
 }) {
     const total = depts.length;
-    const uploaded = recipes.filter(r => r.validated !== false).length;
-    const approved = recipes.filter(r => r.validated === true).length;
-    const missing = total - uploaded;
-    const totalAmount = recipes.filter(r => r.validated === true).reduce((acc, r) => acc + Number(r.amount ?? 0), 0);
-
-    const items = [
-        { label: "Subieron", value: uploaded, color: Colors.primary.main, icon: "cloud-upload-outline" as const },
-        { label: "Aprobados", value: approved, color: Colors.status.success, icon: "checkmark-circle-outline" as const },
-        { label: "Faltan", value: missing, color: Colors.status.error, icon: "alert-circle-outline" as const },
-    ];
+    const approvedRecipes = recipes.filter(r => r.validated === true);
+    const approvedDepts = new Set(approvedRecipes.map(r => r.dep_id)).size;
+    const pending = recipes.filter(r => r.validated === null || r.validated === undefined).length;
+    const missing = total - new Set(recipes.filter(r => r.validated !== false).map(r => r.dep_id)).size;
+    const totalAmount = approvedRecipes.reduce((acc, r) => acc + Number(r.amount_paid), 0);
+    const expectedTotal = amountExpected > 0 ? amountExpected * total : 0;
 
     return (
         <View style={sbar.root}>
             <View style={sbar.amountRow}>
                 <Ionicons name="wallet-outline" size={14} color={Colors.primary.main} />
                 <Text style={sbar.amountLabel}>Total aprobado del mes</Text>
-                <Text style={sbar.amountValue}>{formatCurrency(totalAmount)}</Text>
+                <View style={{ alignItems: "flex-end" }}>
+                    <Text style={sbar.amountValue}>{formatCurrency(totalAmount)}</Text>
+                    {expectedTotal > 0 && (
+                        <Text style={sbar.expectedText}>de {formatCurrency(expectedTotal)} esperado</Text>
+                    )}
+                </View>
             </View>
             <View style={sbar.divider} />
             <View style={sbar.statsRow}>
-                {items.map((item, i) => (
+                {[
+                    { label: "Pagaron", value: approvedDepts, color: Colors.status.success, icon: "checkmark-circle-outline" as const },
+                    { label: "Pendientes", value: pending, color: Colors.status.warning, icon: "time-outline" as const },
+                    { label: "Faltan", value: missing, color: Colors.status.error, icon: "alert-circle-outline" as const },
+                ].map((item, i) => (
                     <View key={i} style={sbar.statItem}>
                         <View style={[sbar.statIcon, { backgroundColor: item.color + "18" }]}>
                             <Ionicons name={item.icon} size={13} color={item.color} />
@@ -553,7 +587,7 @@ function SummaryBar({
     );
 }
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
+//   Main Screen  
 
 export default function AdminRecipesScreen() {
     const { user } = useSession();
@@ -561,6 +595,7 @@ export default function AdminRecipesScreen() {
 
     const [departments, setDepartments] = useState<Department[]>([]);
     const [depsLoading, setDepsLoading] = useState(true);
+    const [monthlyAmountExpected, setMonthlyAmountExpected] = useState(0);
 
     const MONTHS_LIST = useMemo(() => buildMonthList(6), []);
     const [selectedMonthIdx, setSelectedMonthIdx] = useState(0);
@@ -573,7 +608,6 @@ export default function AdminRecipesScreen() {
 
     const selectedYear = new Date().getFullYear();
 
-    // ── Fetch departments (is_in_use = true) ──────────────────────────────────
     useEffect(() => {
         const fetchDepts = async () => {
             setDepsLoading(true);
@@ -588,89 +622,116 @@ export default function AdminRecipesScreen() {
         fetchDepts();
     }, []);
 
-    // ── Fetch recipes for current year ────────────────────────────────────────
     useEffect(() => {
         fetchAllRecipes(selectedYear);
     }, [selectedYear]);
 
-    // ── Filter recipes for selected month ─────────────────────────────────────
-    const monthRecipes = useMemo(() => {
-        return recipes.filter(
+    // Fetch cuota esperada del mes seleccionado
+    useEffect(() => {
+        const fetchQuota = async () => {
+            const { data } = await supabase
+                .from("monthly_quota")
+                .select("amount")
+                .eq("month", selectedMonth.month)
+                .eq("year", selectedMonth.year)
+                .maybeSingle();
+            setMonthlyAmountExpected(data ? Number(data.amount) : 0);
+        };
+        fetchQuota();
+    }, [selectedMonth]);
+
+    // Pagos del mes seleccionado agrupados por departamento
+    const deptSummaries = useMemo(() => {
+        const monthRecipes = recipes.filter(
             r => r.month === selectedMonth.month && r.year === selectedMonth.year
         );
-    }, [recipes, selectedMonth]);
 
-    // Map dep_id → recipe for this month (only non-rejected)
-    const recipeByDept = useMemo(() => {
-        const map = new Map<number, Recipe>();
+        const map = new Map<number, DeptPaymentSummary>();
+
         for (const r of monthRecipes) {
-            if (r.validated !== false) map.set(r.dep_id, r);
+            if (r.validated === false) continue; // ignorar rechazados
+            const existing = map.get(r.dep_id) ?? {
+                totalPaid: 0,
+                expected: r.amount_expected,
+                payments: [],
+                isPartial: false,
+                latestRecipe: null,
+            };
+            existing.payments.push(r);
+            if (r.validated === true) {
+                existing.totalPaid += Number(r.amount_paid);
+            }
+            if (!existing.latestRecipe || new Date(r.created_at) > new Date(existing.latestRecipe.created_at)) {
+                existing.latestRecipe = r;
+            }
+            map.set(r.dep_id, existing);
         }
-        return map;
-    }, [monthRecipes]);
 
-    // Pending count per month tab (for badge)
+        // Calcular si es pago parcial
+        for (const [, summary] of map) {
+            const effectiveExpected = summary.expected > 0 ? summary.expected : monthlyAmountExpected;
+            summary.isPartial = effectiveExpected > 0 && summary.totalPaid < effectiveExpected && summary.totalPaid > 0;
+        }
+
+        return map;
+    }, [recipes, selectedMonth, monthlyAmountExpected]);
+
     const pendingCountByMonth = useMemo(() => {
         const counts: Record<string, number> = {};
         for (const m of MONTHS_LIST) {
             const mRecipes = recipes.filter(r => r.month === m.month && r.year === m.year && r.validated !== false);
-            const uploaded = new Set(mRecipes.map(r => r.dep_id));
-            counts[m.key] = departments.filter(d => !uploaded.has(d.id)).length;
+            const paid = new Set(mRecipes.filter(r => r.validated === true).map(r => r.dep_id));
+            counts[m.key] = departments.filter(d => !paid.has(d.id)).length;
         }
         return counts;
     }, [recipes, departments, MONTHS_LIST]);
 
-    // ── Validate ──────────────────────────────────────────────────────────────
     const handleValidate = async (id: number, validated: boolean) => {
         setValidatingId(id);
         await validateRecipe(id, validated);
         setValidatingId(null);
     };
 
-    // ── Register cash payment — inserts a new recipe pre-approved ─────────────
     const handleCashPayment = async (
-        depId: number,
-        month: string,
-        year: number,
-        amount: number
+        depId: number, month: string, year: number, amount: number, amountExpected: number
     ) => {
         try {
             const { error: dbError } = await supabase
-                .from("recipes")
+                .from("recipes_payment")
                 .insert([{
-                    dep_id: depId,
-                    month,
-                    year,
-                    amount,
+                    dep_id: depId, month, year,
+                    amount_paid: amount,
+                    amount_expected: amountExpected,
                     img: null,
-                    validated: true,   // aprobado directo
+                    validated: true,
+                    created_at: new Date().toISOString(),
                 }]);
 
             if (dbError) {
                 Alert.alert("Error", "No se pudo registrar el pago. Intenta de nuevo.");
                 return;
             }
-
-            // Refrescar la lista para reflejar el nuevo registro
             await fetchAllRecipes(selectedYear);
         } catch {
             Alert.alert("Error", "No se pudo conectar al servidor.");
         }
     };
 
-    // ─── Render ───────────────────────────────────────────────────────────────
-
     const isReady = !isLoading && !depsLoading;
-
     const getDeptName = (depId: number) =>
         departments.find(d => d.id === depId)?.name ?? "Departamento";
+
+    // Calcular recetas del mes para SummaryBar
+    const monthRecipesForSummary = useMemo(() =>
+        recipes.filter(r => r.month === selectedMonth.month && r.year === selectedMonth.year),
+        [recipes, selectedMonth]
+    );
 
     return (
         <View style={styles.root}>
             <StatusBar barStyle="dark-content" backgroundColor={Colors.screen.bg} />
             <SafeAreaView style={{ flex: 1 }}>
 
-                {/* ── Header ───────────────────────────────────────────── */}
                 <View style={styles.header}>
                     <TouchableOpacity
                         style={styles.backBtn}
@@ -685,11 +746,9 @@ export default function AdminRecipesScreen() {
                     </View>
                 </View>
 
-                {/* ── Month Tabs ────────────────────────────────────────── */}
                 <View style={styles.tabsWrapper}>
                     <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
+                        horizontal showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.tabsRow}
                     >
                         {MONTHS_LIST.map((m, i) => (
@@ -704,7 +763,6 @@ export default function AdminRecipesScreen() {
                     </ScrollView>
                 </View>
 
-                {/* ── Content ───────────────────────────────────────────── */}
                 {!isReady ? (
                     <View style={styles.centered}>
                         <ActivityIndicator size="large" color={Colors.primary.main} />
@@ -731,18 +789,19 @@ export default function AdminRecipesScreen() {
                         ListHeaderComponent={
                             <SummaryBar
                                 depts={departments}
-                                recipes={monthRecipes.filter(r => r.validated !== false)}
+                                recipes={monthRecipesForSummary}
+                                amountExpected={monthlyAmountExpected}
                             />
                         }
                         ListEmptyComponent={
                             <View style={styles.emptyCard}>
                                 <Ionicons name="business-outline" size={32} color={Colors.screen.textMuted} />
-                                <Text style={styles.stateText}>Sin departamentos activos registrados.</Text>
+                                <Text style={styles.stateText}>Sin departamentos activos.</Text>
                             </View>
                         }
                         renderItem={({ item: dept }) => {
-                            const recipe = recipeByDept.get(dept.id) ?? null;
-                            const isValidating = recipe ? validatingId === recipe.id : false;
+                            const summary = deptSummaries.get(dept.id) ?? null;
+                            const isValidating = summary?.latestRecipe ? validatingId === summary.latestRecipe.id : false;
                             return (
                                 <View style={{ opacity: isValidating ? 0.55 : 1 }}>
                                     {isValidating && (
@@ -752,9 +811,8 @@ export default function AdminRecipesScreen() {
                                     )}
                                     <DeptRow
                                         dept={dept}
-                                        recipe={recipe}
+                                        summary={summary}
                                         onValidate={handleValidate}
-                                        onViewImage={setViewingImage}
                                         onViewReceipt={setSelectedRecipe}
                                         onCashPayment={setCashTarget}
                                     />
@@ -767,7 +825,6 @@ export default function AdminRecipesScreen() {
                 )}
             </SafeAreaView>
 
-            {/* Receipt Detail Modal */}
             {selectedRecipe && (
                 <ReceiptModal
                     recipe={selectedRecipe}
@@ -777,26 +834,23 @@ export default function AdminRecipesScreen() {
                 />
             )}
 
-            {/* Cash Payment Modal */}
             {cashTarget && (
                 <CashPaymentModal
                     dept={cashTarget}
                     month={selectedMonth.month}
                     year={selectedMonth.year}
+                    amountExpected={monthlyAmountExpected}
                     onClose={() => setCashTarget(null)}
                     onConfirm={handleCashPayment}
                 />
             )}
 
-            {/* Image Viewer */}
             {viewingImage && (
                 <ImageViewer uri={viewingImage} onClose={() => setViewingImage(null)} />
             )}
         </View>
     );
 }
-
-// ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
@@ -841,7 +895,6 @@ const styles = StyleSheet.create({
     },
 });
 
-// Month Tab
 const mtab = StyleSheet.create({
     root: {
         flexDirection: "row", alignItems: "center", gap: 5,
@@ -849,9 +902,7 @@ const mtab = StyleSheet.create({
         borderRadius: 20, borderWidth: 1.5,
         borderColor: Colors.screen.border, backgroundColor: Colors.screen.bg,
     },
-    rootActive: {
-        borderColor: Colors.primary.main, backgroundColor: Colors.primary.soft,
-    },
+    rootActive: { borderColor: Colors.primary.main, backgroundColor: Colors.primary.soft },
     label: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.screen.textMuted },
     labelActive: { color: Colors.primary.dark },
     badge: {
@@ -864,58 +915,62 @@ const mtab = StyleSheet.create({
     badgeTextActive: { color: "#fff" },
 });
 
-// Dept Row
 const drow = StyleSheet.create({
     root: {
         flexDirection: "row", alignItems: "center", gap: 10,
-        backgroundColor: Colors.screen.card, borderRadius: 14,
-        borderWidth: 1, borderColor: Colors.screen.border,
-        padding: 12,
+        borderRadius: 14, borderWidth: 1, padding: 12,
         shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
-    },
-    rootMissing: {
-        backgroundColor: "#FEF2F2", borderColor: "#FECACA",
     },
     deptIcon: {
         width: 38, height: 38, borderRadius: 11,
         backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
         alignItems: "center", justifyContent: "center", flexShrink: 0,
     },
-    deptIconMissing: {
-        backgroundColor: "#FEF2F2", borderColor: "#FECACA",
-    },
-    deptInitial: {
-        fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.primary.dark,
-    },
+    deptIconMissing: { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
+    deptInitial: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.primary.dark },
     info: { flex: 1, gap: 2 },
     deptName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textPrimary },
-    sub: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
-    statusPill: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1, flexShrink: 0,
-    },
-    statusText: { fontFamily: "Outfit_600SemiBold", fontSize: 10 },
+    amountsRow: { flexDirection: "row", alignItems: "center" },
+    paidText: { fontFamily: "Outfit_700Bold", fontSize: 12 },
+    expectedText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
+    sub: { fontFamily: "Outfit_400Regular", fontSize: 11 },
     missingBadge: {
         flexDirection: "row", alignItems: "center", gap: 4,
         paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
         backgroundColor: Colors.status.errorBg, borderWidth: 1, borderColor: Colors.status.errorBorder,
-        flexShrink: 0,
     },
     missingText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: Colors.status.error },
+    partialBadge: {
+        flexDirection: "row", alignItems: "center", gap: 4,
+        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
+        backgroundColor: Colors.status.warningBg, borderWidth: 1, borderColor: Colors.status.warningBorder,
+    },
+    partialText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: Colors.status.warning },
+    pendingBadge: {
+        flexDirection: "row", alignItems: "center", gap: 4,
+        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
+        backgroundColor: Colors.status.warningBg, borderWidth: 1, borderColor: Colors.status.warningBorder,
+    },
+    pendingText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: Colors.status.warning },
+    approvedBadge: {
+        flexDirection: "row", alignItems: "center", gap: 4,
+        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
+        backgroundColor: Colors.status.successBg, borderWidth: 1, borderColor: Colors.status.successBorder,
+    },
+    approvedText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: Colors.status.success },
     cashBtn: {
-        width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+        width: 32, height: 32, borderRadius: 10,
         backgroundColor: "#F0FDF4", borderWidth: 1, borderColor: "#BBF7D0",
         alignItems: "center", justifyContent: "center", marginLeft: 4,
     },
     approveBtn: {
-        width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+        width: 32, height: 32, borderRadius: 10,
         backgroundColor: Colors.status.successBg, borderWidth: 1, borderColor: Colors.status.successBorder,
         alignItems: "center", justifyContent: "center", marginLeft: 4,
     },
 });
 
-// Summary Bar
 const sbar = StyleSheet.create({
     root: {
         backgroundColor: Colors.screen.card, borderRadius: 16,
@@ -931,21 +986,17 @@ const sbar = StyleSheet.create({
     },
     amountLabel: { fontFamily: "Outfit_500Medium", fontSize: 13, color: Colors.screen.textSecondary, flex: 1 },
     amountValue: { fontFamily: "Outfit_800ExtraBold", fontSize: 18, color: Colors.primary.dark },
+    expectedText: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.screen.textMuted, textAlign: "right" },
     divider: { height: 1, backgroundColor: Colors.screen.border, marginHorizontal: 16 },
-    statsRow: {
-        flexDirection: "row", paddingHorizontal: 16, paddingVertical: 12,
-    },
+    statsRow: { flexDirection: "row", paddingHorizontal: 16, paddingVertical: 12 },
     statItem: { flex: 1, alignItems: "center", gap: 4 },
     statIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
     statValue: { fontFamily: "Outfit_800ExtraBold", fontSize: 18 },
     statLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.screen.textMuted },
 });
 
-// Receipt Modal
 const rmodal = StyleSheet.create({
-    overlay: {
-        flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)",
-    },
+    overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" },
     sheet: {
         backgroundColor: Colors.screen.card,
         borderTopLeftRadius: 24, borderTopRightRadius: 24,
@@ -957,12 +1008,10 @@ const rmodal = StyleSheet.create({
         backgroundColor: Colors.screen.border, alignSelf: "center",
         marginTop: 12, marginBottom: 16,
     },
-    header: {
-        flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16,
-    },
+    header: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 },
     avatar: {
         width: 40, height: 40, borderRadius: 12, borderWidth: 1.5,
-        alignItems: "center", justifyContent: "center", flexShrink: 0,
+        alignItems: "center", justifyContent: "center",
     },
     avatarText: { fontFamily: "Outfit_700Bold", fontSize: 16 },
     headerInfo: { flex: 1, gap: 2 },
@@ -978,14 +1027,26 @@ const rmodal = StyleSheet.create({
         backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
         alignItems: "center", justifyContent: "center",
     },
-    amountRow: {
-        flexDirection: "row", alignItems: "center", gap: 8,
-        backgroundColor: Colors.primary.soft, borderRadius: 12,
-        borderWidth: 1, borderColor: Colors.primary.muted,
-        paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16,
+    amountsCard: {
+        flexDirection: "row", alignItems: "center",
+        backgroundColor: Colors.screen.bg, borderRadius: 12,
+        borderWidth: 1, borderColor: Colors.screen.border,
+        marginBottom: 12, overflow: "hidden",
     },
-    amountLabel: { fontFamily: "Outfit_500Medium", fontSize: 13, color: Colors.primary.dark, flex: 1 },
-    amountValue: { fontFamily: "Outfit_800ExtraBold", fontSize: 18, color: Colors.primary.dark },
+    amountItem: { flex: 1, alignItems: "center", paddingVertical: 12 },
+    amountDivider: { width: 1, height: 40, backgroundColor: Colors.screen.border },
+    amountItemLabel: {
+        fontFamily: "Outfit_700Bold", fontSize: 9,
+        color: Colors.screen.textMuted, letterSpacing: 1.2, marginBottom: 4,
+    },
+    amountItemValue: { fontFamily: "Outfit_700Bold", fontSize: 16 },
+    partialAlert: {
+        flexDirection: "row", alignItems: "center", gap: 8,
+        backgroundColor: Colors.status.warningBg, borderRadius: 10,
+        borderWidth: 1, borderColor: Colors.status.warningBorder,
+        paddingHorizontal: 12, paddingVertical: 9, marginBottom: 12,
+    },
+    partialAlertText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.warning },
     section: { marginBottom: 16 },
     sectionLabel: {
         fontFamily: "Outfit_700Bold", fontSize: 10,
@@ -1028,7 +1089,6 @@ const rmodal = StyleSheet.create({
     actionBtnText: { fontFamily: "Outfit_700Bold", fontSize: 14 },
 });
 
-// Image Viewer
 const viewer = StyleSheet.create({
     overlay: {
         flex: 1, backgroundColor: "rgba(0,0,0,0.92)",
@@ -1043,12 +1103,8 @@ const viewer = StyleSheet.create({
     img: { width: "92%", height: "75%" },
 });
 
-// Cash Payment Modal
 const cash = StyleSheet.create({
-    overlay: {
-        flex: 1, justifyContent: "flex-end",
-        backgroundColor: "rgba(0,0,0,0.45)",
-    },
+    overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" },
     sheet: {
         backgroundColor: Colors.screen.card,
         borderTopLeftRadius: 26, borderTopRightRadius: 26,
@@ -1057,46 +1113,38 @@ const cash = StyleSheet.create({
     },
     handle: {
         width: 36, height: 4, borderRadius: 2,
-        backgroundColor: Colors.screen.border,
-        alignSelf: "center", marginTop: 12, marginBottom: 18,
+        backgroundColor: Colors.screen.border, alignSelf: "center",
+        marginTop: 12, marginBottom: 18,
     },
-    header: {
-        flexDirection: "row", alignItems: "center",
-        gap: 12, marginBottom: 16,
-    },
+    header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
     headerIconWrap: {
         width: 44, height: 44, borderRadius: 13,
         backgroundColor: "#F0FDF4", borderWidth: 1.5, borderColor: "#BBF7D0",
-        alignItems: "center", justifyContent: "center", flexShrink: 0,
+        alignItems: "center", justifyContent: "center",
     },
-    headerTitle: {
-        fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary,
-    },
-    headerSub: {
-        fontFamily: "Outfit_400Regular", fontSize: 11,
-        color: Colors.screen.textMuted, marginTop: 1,
-    },
+    headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary },
+    headerSub: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 1 },
     closeBtn: {
         width: 32, height: 32, borderRadius: 10,
         backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
         alignItems: "center", justifyContent: "center",
     },
-    infoRow: {
-        flexDirection: "row", gap: 8, marginBottom: 16,
-    },
+    infoRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
     infoPill: {
         flexDirection: "row", alignItems: "center", gap: 6,
         flex: 1, paddingHorizontal: 12, paddingVertical: 9,
         backgroundColor: Colors.primary.soft, borderRadius: 12,
         borderWidth: 1, borderColor: Colors.primary.muted,
     },
-    infoPillText: {
-        fontFamily: "Outfit_600SemiBold", fontSize: 12,
-        color: Colors.primary.dark, flex: 1,
+    infoPillText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.dark, flex: 1 },
+    expectedNote: {
+        flexDirection: "row", alignItems: "center", gap: 6,
+        backgroundColor: "#F0F9FF", borderRadius: 8,
+        borderWidth: 1, borderColor: "#BAE6FD",
+        paddingHorizontal: 10, paddingVertical: 7, marginBottom: 12,
     },
-    divider: {
-        height: 1, backgroundColor: Colors.screen.border, marginBottom: 18,
-    },
+    expectedNoteText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: "#0C4A6E" },
+    divider: { height: 1, backgroundColor: Colors.screen.border, marginBottom: 18 },
     fieldWrap: { marginBottom: 14 },
     fieldLabel: {
         fontFamily: "Outfit_700Bold", fontSize: 11,
@@ -1107,45 +1155,26 @@ const cash = StyleSheet.create({
         flexDirection: "row", alignItems: "center",
         height: 60, borderRadius: 14,
         borderWidth: 2, borderColor: "#16A34A",
-        backgroundColor: "#F0FDF4",
-        paddingHorizontal: 16, gap: 6,
+        backgroundColor: "#F0FDF4", paddingHorizontal: 16, gap: 6,
     },
-    inputRowError: {
-        borderColor: Colors.status.error, backgroundColor: Colors.status.errorBg,
-    },
-    currencySymbol: {
-        fontFamily: "Outfit_800ExtraBold", fontSize: 26,
-        color: "#16A34A",
-    },
-    input: {
-        flex: 1, fontFamily: "Outfit_800ExtraBold",
-        fontSize: 30, color: Colors.screen.textPrimary,
-    },
-    errorRow: {
-        flexDirection: "row", alignItems: "center",
-        gap: 4, marginTop: 6,
-    },
-    errorText: {
-        fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.error,
-    },
+    inputRowError: { borderColor: Colors.status.error, backgroundColor: Colors.status.errorBg },
+    currencySymbol: { fontFamily: "Outfit_800ExtraBold", fontSize: 26, color: "#16A34A" },
+    input: { flex: 1, fontFamily: "Outfit_800ExtraBold", fontSize: 30, color: Colors.screen.textPrimary },
+    errorRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6 },
+    errorText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.error },
     notice: {
         flexDirection: "row", alignItems: "flex-start", gap: 8,
         backgroundColor: Colors.primary.soft, borderRadius: 10,
         borderWidth: 1, borderColor: Colors.primary.muted,
         paddingHorizontal: 12, paddingVertical: 10, marginBottom: 20,
     },
-    noticeText: {
-        flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12,
-        color: Colors.primary.dark, lineHeight: 17,
-    },
+    noticeText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.primary.dark, lineHeight: 17 },
     actions: { flexDirection: "row", gap: 10 },
     cancelBtn: {
         flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center",
         backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
     },
-    cancelText: {
-        fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary,
-    },
+    cancelText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
     confirmBtn: {
         flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center",
         gap: 8, paddingVertical: 14, borderRadius: 12,
@@ -1153,7 +1182,13 @@ const cash = StyleSheet.create({
         shadowColor: "#16A34A", shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
     },
-    confirmText: {
-        fontFamily: "Outfit_700Bold", fontSize: 15, color: "#fff",
-    },
+    confirmText: { fontFamily: "Outfit_700Bold", fontSize: 15, color: "#fff" },
 });
+
+interface DeptPaymentSummary {
+    totalPaid: number;
+    expected: number;
+    payments: Recipe[];
+    isPartial: boolean;
+    latestRecipe: Recipe | null;
+}

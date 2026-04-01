@@ -7,12 +7,14 @@ export interface Expense {
     url_image: string | null;
     amount: number;
     created_at: string;
+    expense_date: string;
 }
 
 export interface CreateExpensePayload {
     description: string;
     url_image: string | null;
     amount: number;
+    expense_date?: string;
 }
 
 export function useExpenses() {
@@ -20,13 +22,13 @@ export function useExpenses() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // ── Fetch todos los gastos ───────────────────────────────────────────────
+    // Fetch todos los gastos 
     const fetchExpenses = async () => {
         setIsLoading(true);
         setError(null);
         try {
             const { data, error: dbError } = await supabase
-                .from("expenses")
+                .from("tower_expenses")
                 .select("*")
                 .order("created_at", { ascending: false });
 
@@ -42,14 +44,15 @@ export function useExpenses() {
         }
     };
 
-    // ── Crear gasto ──────────────────────────────────────────────────────────
+    // Crear gasto 
     const createExpense = async (payload: CreateExpensePayload): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
         try {
+            const now = new Date().toISOString();
             const { error: dbError } = await supabase
-                .from("expenses")
-                .insert([{ ...payload, created_at: new Date().toISOString() }]);
+                .from("tower_expenses")
+                .insert([{ ...payload, created_at: now, expense_date: payload.expense_date ?? now }]);
 
             if (dbError) {
                 console.error("Error Supabase createExpense:", dbError.message, dbError.details);
@@ -66,13 +69,13 @@ export function useExpenses() {
         }
     };
 
-    // ── Eliminar gasto ───────────────────────────────────────────────────────
+    // Eliminar gasto 
     const deleteExpense = async (id: number): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
         try {
             const { error: dbError } = await supabase
-                .from("expenses")
+                .from("tower_expenses")
                 .delete()
                 .eq("id", id);
 
