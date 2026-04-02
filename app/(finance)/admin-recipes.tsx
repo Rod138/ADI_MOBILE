@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
 import { useRecipes, type Recipe } from "@/hooks/useRecipes";
+import { useTowerFund } from "@/hooks/useTowerFund";
 import supabase from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -26,7 +27,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-//  Tipos 
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface Department {
     id: number;
@@ -34,7 +35,26 @@ interface Department {
     is_in_use: boolean;
 }
 
-//   Helpers 
+interface MonthEntry {
+    month: string;
+    year: number;
+    key: string;
+}
+
+interface DeptPaymentSummary {
+    totalPaid: number;
+    expected: number;
+    payments: Recipe[];
+    isPartial: boolean;
+    latestRecipe: Recipe | null;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const MONTH_NAMES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
 
 function formatCurrency(n: number) {
     return `$${Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
@@ -42,41 +62,42 @@ function formatCurrency(n: number) {
 
 function getStatusConfig(validated: boolean | null) {
     if (validated === true)
-        return {
-            label: "Aprobado", color: Colors.status.success,
-            bg: Colors.status.successBg, border: Colors.status.successBorder,
-            icon: "checkmark-circle" as const,
-        };
+        return { label: "Aprobado", color: Colors.status.success, bg: Colors.status.successBg, border: Colors.status.successBorder, icon: "checkmark-circle" as const };
     if (validated === false)
-        return {
-            label: "Rechazado", color: Colors.status.error,
-            bg: Colors.status.errorBg, border: Colors.status.errorBorder,
-            icon: "close-circle" as const,
-        };
-    return {
-        label: "Pendiente", color: Colors.status.warning,
-        bg: Colors.status.warningBg, border: Colors.status.warningBorder,
-        icon: "time" as const,
-    };
+        return { label: "Rechazado", color: Colors.status.error, bg: Colors.status.errorBg, border: Colors.status.errorBorder, icon: "close-circle" as const };
+    return { label: "Pendiente", color: Colors.status.warning, bg: Colors.status.warningBg, border: Colors.status.warningBorder, icon: "time" as const };
 }
 
-function buildMonthList(count = 6): { month: string; year: number; key: string }[] {
+/**
+ * Genera la lista de meses desde `startDate` hasta hoy (en orden desc).
+ * Si startDate es undefined o null, solo muestra el mes actual.
+ */
+function buildMonthList(startDate: string | null): MonthEntry[] {
     const now = new Date();
-    const result: { month: string; year: number; key: string }[] = [];
-    const MONTH_NAMES = [
-        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-    ];
-    for (let i = 0; i < count; i++) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const month = MONTH_NAMES[d.getMonth()];
-        const year = d.getFullYear();
-        result.push({ month, year, key: `${month}-${year}` });
+    const result: MonthEntry[] = [];
+
+    const startFrom = startDate ? new Date(startDate) : now;
+    // Normalizar al primer día del mes de inicio
+    const startYear = startFrom.getFullYear();
+    const startMonth = startFrom.getMonth(); // 0-indexed
+
+    let y = now.getFullYear();
+    let m = now.getMonth(); // 0-indexed
+
+    // Iterar hacia atrás hasta el mes de inicio
+    while (y > startYear || (y === startYear && m >= startMonth)) {
+        const monthName = MONTH_NAMES[m];
+        result.push({ month: monthName, year: y, key: `${monthName}-${y}` });
+        m--;
+        if (m < 0) { m = 11; y--; }
+        // Límite de seguridad: máximo 60 meses (5 años)
+        if (result.length >= 60) break;
     }
-    return result;
+
+    return result; // ya está en orden desc
 }
 
-//   Image Viewer 
+// ─── Image Viewer ─────────────────────────────────────────────────────────────
 
 function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
     const fade = useRef(new Animated.Value(0)).current;
@@ -109,16 +130,14 @@ function MonthTab({ label, isActive, pendingCount, onPress }: {
             <Text style={[mtab.label, isActive && mtab.labelActive]}>{label}</Text>
             {pendingCount > 0 && (
                 <View style={[mtab.badge, isActive && mtab.badgeActive]}>
-                    <Text style={[mtab.badgeText, isActive && mtab.badgeTextActive]}>
-                        {pendingCount}
-                    </Text>
+                    <Text style={[mtab.badgeText, isActive && mtab.badgeTextActive]}>{pendingCount}</Text>
                 </View>
             )}
         </TouchableOpacity>
     );
 }
 
-//   Cash Payment Modal 
+// ─── Cash Payment Modal ───────────────────────────────────────────────────────
 
 function CashPaymentModal({
     dept, month, year, amountExpected, onClose, onConfirm,
@@ -131,31 +150,21 @@ function CashPaymentModal({
     const [amountError, setAmountError] = useState<string | undefined>();
     const [saving, setSaving] = useState(false);
 
-    const validateAmount = (val: string) => {
-        if (!val.trim()) return "Ingresa el monto del pago.";
-        const n = parseInt(val, 10);
-        if (isNaN(n) || n <= 0) return "El monto debe ser mayor a 0.";
-        return undefined;
-    };
-
     const handleConfirm = async () => {
         Keyboard.dismiss();
-        const err = validateAmount(amount);
-        if (err) { setAmountError(err); return; }
-
+        if (!amount.trim() || parseInt(amount, 10) <= 0) { setAmountError("El monto debe ser mayor a 0."); return; }
         Alert.alert(
             "Registrar pago en efectivo",
             `¿Confirmar pago de ${dept.name} por $${amount} para ${month} ${year}?\n\nEste registro quedará aprobado de inmediato.`,
             [
                 { text: "Cancelar", style: "cancel" },
                 {
-                    text: "Confirmar",
-                    onPress: async () => {
+                    text: "Confirmar", onPress: async () => {
                         setSaving(true);
                         await onConfirm(dept.id, month, year, parseInt(amount, 10), amountExpected > 0 ? amountExpected : parseInt(amount, 10));
                         setSaving(false);
                         onClose();
-                    },
+                    }
                 },
             ]
         );
@@ -163,10 +172,7 @@ function CashPaymentModal({
 
     return (
         <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-            <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === "ios" ? "padding" : "height"}
-            >
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
                 <View style={cash.overlay}>
                     <View style={cash.sheet}>
                         <View style={cash.handle} />
@@ -204,25 +210,15 @@ function CashPaymentModal({
                         )}
 
                         <View style={cash.divider} />
-
                         <View style={cash.fieldWrap}>
                             <Text style={cash.fieldLabel}>MONTO RECIBIDO</Text>
                             <View style={[cash.inputRow, amountError && cash.inputRowError]}>
                                 <Text style={cash.currencySymbol}>$</Text>
                                 <TextInput
-                                    style={cash.input}
-                                    placeholder="0"
-                                    placeholderTextColor={Colors.screen.textMuted}
-                                    keyboardType="number-pad"
-                                    maxLength={8}
-                                    value={amount}
-                                    onChangeText={(v) => {
-                                        setAmount(v.replace(/[^0-9]/g, ""));
-                                        setAmountError(undefined);
-                                    }}
-                                    autoFocus
-                                    returnKeyType="done"
-                                    onSubmitEditing={handleConfirm}
+                                    style={cash.input} placeholder="0" placeholderTextColor={Colors.screen.textMuted}
+                                    keyboardType="number-pad" maxLength={8} value={amount}
+                                    onChangeText={v => { setAmount(v.replace(/[^0-9]/g, "")); setAmountError(undefined); }}
+                                    autoFocus returnKeyType="done" onSubmitEditing={handleConfirm}
                                 />
                                 {amount.length > 0 && (
                                     <TouchableOpacity onPress={() => { setAmount(""); setAmountError(undefined); }}>
@@ -249,15 +245,8 @@ function CashPaymentModal({
                             <TouchableOpacity style={cash.cancelBtn} onPress={onClose} activeOpacity={0.8}>
                                 <Text style={cash.cancelText}>Cancelar</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[cash.confirmBtn, saving && { opacity: 0.6 }]}
-                                onPress={handleConfirm}
-                                disabled={saving}
-                                activeOpacity={0.85}
-                            >
-                                {saving ? (
-                                    <ActivityIndicator size="small" color="#fff" />
-                                ) : (
+                            <TouchableOpacity style={[cash.confirmBtn, saving && { opacity: 0.6 }]} onPress={handleConfirm} disabled={saving} activeOpacity={0.85}>
+                                {saving ? <ActivityIndicator size="small" color="#fff" /> : (
                                     <>
                                         <Ionicons name="checkmark-circle" size={17} color="#fff" />
                                         <Text style={cash.confirmText}>Registrar pago</Text>
@@ -272,23 +261,9 @@ function CashPaymentModal({
     );
 }
 
-//   Dept Row 
+// ─── Dept Row ─────────────────────────────────────────────────────────────────
 
-interface DeptPaymentSummary {
-    totalPaid: number;
-    expected: number;
-    payments: Recipe[];
-    isPartial: boolean;
-    latestRecipe: Recipe | null;
-}
-
-function DeptRow({
-    dept,
-    summary,
-    onValidate,
-    onViewReceipt,
-    onCashPayment,
-}: {
+function DeptRow({ dept, summary, onValidate, onViewReceipt, onCashPayment }: {
     dept: Department;
     summary: DeptPaymentSummary | null;
     onValidate: (id: number, validated: boolean) => void;
@@ -296,35 +271,26 @@ function DeptRow({
     onCashPayment: (dept: Department) => void;
 }) {
     const missing = !summary || summary.totalPaid === 0;
-    const isPending = summary && summary.latestRecipe && (summary.latestRecipe.validated === null || summary.latestRecipe.validated === undefined);
-    const isApproved = summary && summary.latestRecipe && summary.latestRecipe.validated === true;
-    const isPartial = summary?.isPartial && isApproved;
+    const isApproved = summary?.latestRecipe?.validated === true && !summary.isPartial;
+    const isPending = summary?.latestRecipe && (summary.latestRecipe.validated === null || summary.latestRecipe.validated === undefined);
+    const isPartial = summary?.isPartial && summary?.latestRecipe?.validated === true;
 
-    const getStatusStyle = () => {
-        if (missing) return { bg: "#FEF2F2", border: "#FECACA" };
-        if (isPartial) return { bg: Colors.status.warningBg, border: Colors.status.warningBorder };
-        if (isApproved && !isPartial) return { bg: Colors.status.successBg, border: Colors.status.successBorder };
-        return { bg: Colors.screen.card, border: Colors.screen.border };
-    };
-
-    const statusStyle = getStatusStyle();
+    const rowBg = missing ? "#FEF2F2" : isPartial ? Colors.status.warningBg : isApproved ? Colors.status.successBg : Colors.screen.card;
+    const rowBorder = missing ? "#FECACA" : isPartial ? Colors.status.warningBorder : isApproved ? Colors.status.successBorder : Colors.screen.border;
 
     return (
         <TouchableOpacity
-            style={[drow.root, { backgroundColor: statusStyle.bg, borderColor: statusStyle.border }]}
+            style={[drow.root, { backgroundColor: rowBg, borderColor: rowBorder }]}
             activeOpacity={summary ? 0.82 : 0.95}
             onPress={() => summary?.latestRecipe && onViewReceipt(summary.latestRecipe)}
         >
             <View style={[drow.deptIcon, missing && drow.deptIconMissing]}>
-                <Text style={[drow.deptInitial, missing && { color: Colors.screen.textMuted }]}>
-                    {dept.name[0]}
-                </Text>
+                <Text style={[drow.deptInitial, missing && { color: Colors.screen.textMuted }]}>{dept.name[0]}</Text>
             </View>
-
             <View style={drow.info}>
                 <Text style={drow.deptName}>{dept.name}</Text>
                 {summary ? (
-                    <View style={drow.amountsRow}>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
                         <Text style={[drow.paidText, { color: isApproved ? Colors.status.success : Colors.screen.textMuted }]}>
                             {formatCurrency(summary.totalPaid)}
                         </Text>
@@ -337,98 +303,65 @@ function DeptRow({
                 )}
             </View>
 
-            {/* Badges */}
+            {/* Badge de estado */}
             {missing ? (
                 <View style={drow.missingBadge}>
-                    <Ionicons name="alert-circle-outline" size={13} color={Colors.status.error} />
+                    <Ionicons name="alert-circle-outline" size={12} color={Colors.status.error} />
                     <Text style={drow.missingText}>Falta</Text>
                 </View>
             ) : isPartial ? (
                 <View style={drow.partialBadge}>
-                    <Ionicons name="pie-chart-outline" size={12} color={Colors.status.warning} />
+                    <Ionicons name="pie-chart-outline" size={11} color={Colors.status.warning} />
                     <Text style={drow.partialText}>Parcial</Text>
                 </View>
             ) : isPending ? (
                 <View style={drow.pendingBadge}>
-                    <Ionicons name="time" size={12} color={Colors.status.warning} />
+                    <Ionicons name="time" size={11} color={Colors.status.warning} />
                     <Text style={drow.pendingText}>Pendiente</Text>
                 </View>
             ) : isApproved ? (
                 <View style={drow.approvedBadge}>
-                    <Ionicons name="checkmark-circle" size={12} color={Colors.status.success} />
+                    <Ionicons name="checkmark-circle" size={11} color={Colors.status.success} />
                     <Text style={drow.approvedText}>OK</Text>
                 </View>
             ) : null}
 
-            {/* Acciones */}
             {missing && (
-                <TouchableOpacity
-                    style={drow.cashBtn}
+                <TouchableOpacity style={drow.cashBtn}
                     onPress={(e) => { e.stopPropagation?.(); onCashPayment(dept); }}
-                    activeOpacity={0.8}
-                >
-                    <Ionicons name="cash-outline" size={15} color="#16A34A" />
+                    activeOpacity={0.8}>
+                    <Ionicons name="cash-outline" size={14} color="#16A34A" />
                 </TouchableOpacity>
             )}
 
             {isPending && summary?.latestRecipe && (
-                <TouchableOpacity
-                    style={drow.approveBtn}
+                <TouchableOpacity style={drow.approveBtn}
                     onPress={(e) => {
                         e.stopPropagation?.();
-                        Alert.alert(
-                            "Aprobar comprobante",
-                            `¿Aprobar cuota de ${dept.name}?`,
-                            [
-                                { text: "Cancelar", style: "cancel" },
-                                { text: "Aprobar", onPress: () => onValidate(summary.latestRecipe!.id, true) },
-                            ]
-                        );
+                        Alert.alert("Aprobar comprobante", `¿Aprobar cuota de ${dept.name}?`, [
+                            { text: "Cancelar", style: "cancel" },
+                            { text: "Aprobar", onPress: () => onValidate(summary.latestRecipe!.id, true) },
+                        ]);
                     }}
-                    activeOpacity={0.8}
-                >
-                    <Ionicons name="checkmark" size={14} color={Colors.status.success} />
+                    activeOpacity={0.8}>
+                    <Ionicons name="checkmark" size={13} color={Colors.status.success} />
                 </TouchableOpacity>
             )}
         </TouchableOpacity>
     );
 }
 
-//   Receipt Detail Modal 
+// ─── Receipt Detail Modal ─────────────────────────────────────────────────────
 
-function ReceiptModal({
-    recipe, deptName, onClose, onValidate,
-}: {
-    recipe: Recipe; deptName: string; onClose: () => void;
-    onValidate: (id: number, validated: boolean) => void;
+function ReceiptModal({ recipe, deptName, onClose, onValidate }: {
+    recipe: Recipe; deptName: string;
+    onClose: () => void; onValidate: (id: number, validated: boolean) => void;
 }) {
     const sc = getStatusConfig(recipe.validated ?? null);
-    const isPdf = recipe.img?.toLowerCase().includes(".pdf") || recipe.img?.includes("/raw/");
+    const isPdf = recipe.url_image?.toLowerCase().includes(".pdf") || recipe.url_image?.includes("/raw/");
     const isPending = recipe.validated === null || recipe.validated === undefined;
     const [viewingImg, setViewingImg] = useState(false);
     const isPartial = recipe.amount_paid < recipe.amount_expected;
-
-    const handleApprove = () => {
-        Alert.alert(
-            "Aprobar comprobante",
-            `¿Confirmar aprobación de ${deptName} — ${recipe.month} ${recipe.year}?`,
-            [
-                { text: "Cancelar", style: "cancel" },
-                { text: "Aprobar", onPress: () => { onValidate(recipe.id, true); onClose(); } },
-            ]
-        );
-    };
-
-    const handleReject = () => {
-        Alert.alert(
-            "Rechazar comprobante",
-            `¿Confirmar rechazo del comprobante de ${deptName}?`,
-            [
-                { text: "Cancelar", style: "cancel" },
-                { text: "Rechazar", style: "destructive", onPress: () => { onValidate(recipe.id, false); onClose(); } },
-            ]
-        );
-    };
 
     return (
         <Modal visible animationType="slide" transparent onRequestClose={onClose}>
@@ -444,33 +377,30 @@ function ReceiptModal({
                             <Text style={rmodal.period}>{recipe.month} {recipe.year}</Text>
                         </View>
                         <View style={[rmodal.statusPill, { backgroundColor: sc.bg, borderColor: sc.border }]}>
-                            <Ionicons name={sc.icon} size={12} color={sc.color} />
+                            <Ionicons name={sc.icon} size={11} color={sc.color} />
                             <Text style={[rmodal.statusText, { color: sc.color }]}>{sc.label}</Text>
                         </View>
                         <TouchableOpacity style={rmodal.closeBtn} onPress={onClose}>
-                            <Ionicons name="close" size={16} color={Colors.screen.textSecondary} />
+                            <Ionicons name="close" size={15} color={Colors.screen.textSecondary} />
                         </TouchableOpacity>
                     </View>
-
                     <ScrollView showsVerticalScrollIndicator={false}>
                         {/* Montos */}
                         <View style={rmodal.amountsCard}>
                             <View style={rmodal.amountItem}>
                                 <Text style={rmodal.amountItemLabel}>PAGADO</Text>
-                                <Text style={[rmodal.amountItemValue, { color: Colors.primary.dark }]}>
-                                    {formatCurrency(recipe.amount_paid)}
-                                </Text>
+                                <Text style={[rmodal.amountItemValue, { color: Colors.primary.dark }]}>{formatCurrency(recipe.amount_paid)}</Text>
                             </View>
-                            <View style={rmodal.amountDivider} />
-                            <View style={rmodal.amountItem}>
-                                <Text style={rmodal.amountItemLabel}>ESPERADO</Text>
-                                <Text style={[rmodal.amountItemValue, { color: Colors.screen.textSecondary }]}>
-                                    {formatCurrency(recipe.amount_expected)}
-                                </Text>
-                            </View>
+                            {recipe.amount_expected > 0 && (
+                                <>
+                                    <View style={rmodal.amountDivider} />
+                                    <View style={rmodal.amountItem}>
+                                        <Text style={rmodal.amountItemLabel}>ESPERADO</Text>
+                                        <Text style={[rmodal.amountItemValue, { color: Colors.screen.textSecondary }]}>{formatCurrency(recipe.amount_expected)}</Text>
+                                    </View>
+                                </>
+                            )}
                         </View>
-
-                        {/* Alerta pago parcial */}
                         {isPartial && (
                             <View style={rmodal.partialAlert}>
                                 <Ionicons name="pie-chart-outline" size={14} color={Colors.status.warning} />
@@ -479,52 +409,46 @@ function ReceiptModal({
                                 </Text>
                             </View>
                         )}
-
-                        {/* Comprobante */}
                         <View style={rmodal.section}>
                             <Text style={rmodal.sectionLabel}>COMPROBANTE</Text>
-                            {recipe.img ? (
+                            {recipe.url_image ? (
                                 isPdf ? (
-                                    <TouchableOpacity
-                                        style={rmodal.pdfRow}
-                                        onPress={() => Linking.openURL(recipe.img!)}
-                                        activeOpacity={0.85}
-                                    >
+                                    <TouchableOpacity style={rmodal.pdfRow} onPress={() => Linking.openURL(recipe.url_image!)} activeOpacity={0.85}>
                                         <View style={rmodal.pdfIcon}>
-                                            <Ionicons name="document-text" size={24} color={Colors.status.error} />
+                                            <Ionicons name="document-text" size={22} color={Colors.status.error} />
                                         </View>
                                         <View style={{ flex: 1 }}>
                                             <Text style={rmodal.pdfLabel}>Comprobante PDF</Text>
                                             <Text style={rmodal.pdfHint}>Toca para abrir</Text>
                                         </View>
-                                        <Ionicons name="open-outline" size={16} color={Colors.screen.textMuted} />
+                                        <Ionicons name="open-outline" size={15} color={Colors.screen.textMuted} />
                                     </TouchableOpacity>
                                 ) : (
                                     <TouchableOpacity activeOpacity={0.85} onPress={() => setViewingImg(true)}>
-                                        <Image source={{ uri: recipe.img }} style={rmodal.img} resizeMode="cover" />
+                                        <Image source={{ uri: recipe.url_image }} style={rmodal.img} resizeMode="cover" />
                                         <View style={rmodal.imgOverlay}>
-                                            <Ionicons name="expand-outline" size={14} color="#fff" />
+                                            <Ionicons name="expand-outline" size={13} color="#fff" />
                                             <Text style={rmodal.imgOverlayText}>Ver imagen completa</Text>
                                         </View>
                                     </TouchableOpacity>
                                 )
                             ) : (
                                 <View style={rmodal.noImg}>
-                                    <Ionicons name="cash-outline" size={18} color={Colors.screen.textMuted} />
-                                    <Text style={rmodal.noImgText}>Pago en efectivo (sin comprobante)</Text>
+                                    <Ionicons name="cash-outline" size={16} color={Colors.screen.textMuted} />
+                                    <Text style={rmodal.noImgText}>Pago en efectivo</Text>
                                 </View>
                             )}
                         </View>
-
-                        {/* Actions */}
                         {isPending && (
                             <View style={rmodal.actions}>
-                                <TouchableOpacity style={[rmodal.actionBtn, rmodal.rejectBtn]} onPress={handleReject} activeOpacity={0.8}>
-                                    <Ionicons name="close" size={16} color={Colors.status.error} />
+                                <TouchableOpacity style={[rmodal.actionBtn, rmodal.rejectBtn]}
+                                    onPress={() => { Alert.alert("Rechazar", `¿Rechazar comprobante de ${deptName}?`, [{ text: "Cancelar", style: "cancel" }, { text: "Rechazar", style: "destructive", onPress: () => { onValidate(recipe.id, false); onClose(); } }]); }} activeOpacity={0.8}>
+                                    <Ionicons name="close" size={15} color={Colors.status.error} />
                                     <Text style={[rmodal.actionBtnText, { color: Colors.status.error }]}>Rechazar</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={[rmodal.actionBtn, rmodal.approveBtn]} onPress={handleApprove} activeOpacity={0.8}>
-                                    <Ionicons name="checkmark" size={16} color={Colors.status.success} />
+                                <TouchableOpacity style={[rmodal.actionBtn, rmodal.approveBtn]}
+                                    onPress={() => { Alert.alert("Aprobar", `¿Aprobar comprobante de ${deptName}?`, [{ text: "Cancelar", style: "cancel" }, { text: "Aprobar", onPress: () => { onValidate(recipe.id, true); onClose(); } }]); }} activeOpacity={0.8}>
+                                    <Ionicons name="checkmark" size={15} color={Colors.status.success} />
                                     <Text style={[rmodal.actionBtnText, { color: Colors.status.success }]}>Aprobar</Text>
                                 </TouchableOpacity>
                             </View>
@@ -532,39 +456,33 @@ function ReceiptModal({
                     </ScrollView>
                 </View>
             </View>
-
-            {viewingImg && recipe.img && (
-                <ImageViewer uri={recipe.img} onClose={() => setViewingImg(false)} />
+            {viewingImg && recipe.url_image && (
+                <ImageViewer uri={recipe.url_image} onClose={() => setViewingImg(false)} />
             )}
         </Modal>
     );
 }
 
-//   Summary Bar 
+// ─── Summary Bar ──────────────────────────────────────────────────────────────
 
 function SummaryBar({ depts, recipes, amountExpected }: {
-    depts: Department[];
-    recipes: Recipe[];
-    amountExpected: number;
+    depts: Department[]; recipes: Recipe[]; amountExpected: number;
 }) {
-    const total = depts.length;
     const approvedRecipes = recipes.filter(r => r.validated === true);
     const approvedDepts = new Set(approvedRecipes.map(r => r.dep_id)).size;
     const pending = recipes.filter(r => r.validated === null || r.validated === undefined).length;
-    const missing = total - new Set(recipes.filter(r => r.validated !== false).map(r => r.dep_id)).size;
+    const missing = depts.length - new Set(recipes.filter(r => r.validated !== false).map(r => r.dep_id)).size;
     const totalAmount = approvedRecipes.reduce((acc, r) => acc + Number(r.amount_paid), 0);
-    const expectedTotal = amountExpected > 0 ? amountExpected * total : 0;
+    const expectedTotal = amountExpected > 0 ? amountExpected * depts.length : 0;
 
     return (
         <View style={sbar.root}>
             <View style={sbar.amountRow}>
                 <Ionicons name="wallet-outline" size={14} color={Colors.primary.main} />
-                <Text style={sbar.amountLabel}>Total aprobado del mes</Text>
+                <Text style={sbar.amountLabel}>Total aprobado</Text>
                 <View style={{ alignItems: "flex-end" }}>
                     <Text style={sbar.amountValue}>{formatCurrency(totalAmount)}</Text>
-                    {expectedTotal > 0 && (
-                        <Text style={sbar.expectedText}>de {formatCurrency(expectedTotal)} esperado</Text>
-                    )}
+                    {expectedTotal > 0 && <Text style={sbar.expectedText}>de {formatCurrency(expectedTotal)} esperado</Text>}
                 </View>
             </View>
             <View style={sbar.divider} />
@@ -587,35 +505,46 @@ function SummaryBar({ depts, recipes, amountExpected }: {
     );
 }
 
-//   Main Screen  
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function AdminRecipesScreen() {
     const { user } = useSession();
     const { recipes, isLoading, error, fetchAllRecipes, validateRecipe } = useRecipes();
+    const { fetchFund } = useTowerFund();
 
     const [departments, setDepartments] = useState<Department[]>([]);
     const [depsLoading, setDepsLoading] = useState(true);
     const [monthlyAmountExpected, setMonthlyAmountExpected] = useState(0);
-
-    const MONTHS_LIST = useMemo(() => buildMonthList(6), []);
+    const [monthsList, setMonthsList] = useState<MonthEntry[]>([]);
     const [selectedMonthIdx, setSelectedMonthIdx] = useState(0);
-    const selectedMonth = MONTHS_LIST[selectedMonthIdx];
+    const [fundLoading, setFundLoading] = useState(true);
 
     const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [validatingId, setValidatingId] = useState<number | null>(null);
     const [cashTarget, setCashTarget] = useState<Department | null>(null);
 
-    const selectedYear = new Date().getFullYear();
+    const currentYear = new Date().getFullYear();
+
+    // Cargar fondo (para obtener fecha de inicio) → generar lista de meses
+    useEffect(() => {
+        setFundLoading(true);
+        fetchFund().then(fund => {
+            const startDate = fund?.updated_at ?? null;
+            const months = buildMonthList(startDate);
+            setMonthsList(months);
+            setFundLoading(false);
+        });
+    }, []);
+
+    const selectedMonth = monthsList[selectedMonthIdx] ?? null;
 
     useEffect(() => {
         const fetchDepts = async () => {
             setDepsLoading(true);
             const { data } = await supabase
-                .from("departments")
-                .select("id, name, is_in_use")
-                .eq("is_in_use", true)
-                .order("name");
+                .from("departments").select("id, name, is_in_use")
+                .eq("is_in_use", true).order("name");
             setDepartments((data as Department[]) ?? []);
             setDepsLoading(false);
         };
@@ -623,68 +552,54 @@ export default function AdminRecipesScreen() {
     }, []);
 
     useEffect(() => {
-        fetchAllRecipes(selectedYear);
-    }, [selectedYear]);
+        fetchAllRecipes(currentYear);
+    }, [currentYear]);
 
-    // Fetch cuota esperada del mes seleccionado
+    // Cargar cuota del mes seleccionado
     useEffect(() => {
+        if (!selectedMonth) return;
         const fetchQuota = async () => {
             const { data } = await supabase
-                .from("monthly_quota")
-                .select("amount")
-                .eq("month", selectedMonth.month)
-                .eq("year", selectedMonth.year)
-                .maybeSingle();
+                .from("monthly_quota").select("amount")
+                .eq("month", selectedMonth.month).eq("year", selectedMonth.year).maybeSingle();
             setMonthlyAmountExpected(data ? Number(data.amount) : 0);
         };
         fetchQuota();
     }, [selectedMonth]);
 
-    // Pagos del mes seleccionado agrupados por departamento
+    // Pagos del mes agrupados por depto
     const deptSummaries = useMemo(() => {
-        const monthRecipes = recipes.filter(
-            r => r.month === selectedMonth.month && r.year === selectedMonth.year
-        );
-
+        if (!selectedMonth) return new Map<number, DeptPaymentSummary>();
+        const monthRecipes = recipes.filter(r => r.month === selectedMonth.month && r.year === selectedMonth.year);
         const map = new Map<number, DeptPaymentSummary>();
 
         for (const r of monthRecipes) {
-            if (r.validated === false) continue; // ignorar rechazados
-            const existing = map.get(r.dep_id) ?? {
-                totalPaid: 0,
-                expected: r.amount_expected,
-                payments: [],
-                isPartial: false,
-                latestRecipe: null,
-            };
+            if (r.validated === false) continue;
+            const existing = map.get(r.dep_id) ?? { totalPaid: 0, expected: r.amount_expected, payments: [], isPartial: false, latestRecipe: null };
             existing.payments.push(r);
-            if (r.validated === true) {
-                existing.totalPaid += Number(r.amount_paid);
-            }
+            if (r.validated === true) existing.totalPaid += Number(r.amount_paid);
             if (!existing.latestRecipe || new Date(r.created_at) > new Date(existing.latestRecipe.created_at)) {
                 existing.latestRecipe = r;
             }
             map.set(r.dep_id, existing);
         }
 
-        // Calcular si es pago parcial
         for (const [, summary] of map) {
             const effectiveExpected = summary.expected > 0 ? summary.expected : monthlyAmountExpected;
             summary.isPartial = effectiveExpected > 0 && summary.totalPaid < effectiveExpected && summary.totalPaid > 0;
         }
-
         return map;
     }, [recipes, selectedMonth, monthlyAmountExpected]);
 
     const pendingCountByMonth = useMemo(() => {
         const counts: Record<string, number> = {};
-        for (const m of MONTHS_LIST) {
+        for (const m of monthsList) {
             const mRecipes = recipes.filter(r => r.month === m.month && r.year === m.year && r.validated !== false);
             const paid = new Set(mRecipes.filter(r => r.validated === true).map(r => r.dep_id));
             counts[m.key] = departments.filter(d => !paid.has(d.id)).length;
         }
         return counts;
-    }, [recipes, departments, MONTHS_LIST]);
+    }, [recipes, departments, monthsList]);
 
     const handleValidate = async (id: number, validated: boolean) => {
         setValidatingId(id);
@@ -692,38 +607,23 @@ export default function AdminRecipesScreen() {
         setValidatingId(null);
     };
 
-    const handleCashPayment = async (
-        depId: number, month: string, year: number, amount: number, amountExpected: number
-    ) => {
+    const handleCashPayment = async (depId: number, month: string, year: number, amount: number, amountExpected: number) => {
         try {
-            const { error: dbError } = await supabase
-                .from("recipes_payment")
-                .insert([{
-                    dep_id: depId, month, year,
-                    amount_paid: amount,
-                    amount_expected: amountExpected,
-                    img: null,
-                    validated: true,
-                    created_at: new Date().toISOString(),
-                }]);
-
-            if (dbError) {
-                Alert.alert("Error", "No se pudo registrar el pago. Intenta de nuevo.");
-                return;
-            }
-            await fetchAllRecipes(selectedYear);
-        } catch {
-            Alert.alert("Error", "No se pudo conectar al servidor.");
-        }
+            const { error: dbError } = await supabase.from("recipes_payment").insert([{
+                dep_id: depId, month, year,
+                amount_paid: amount, amount_expected: amountExpected,
+                url_image: null, validated: true,
+                created_at: new Date().toISOString(),
+            }]);
+            if (dbError) { Alert.alert("Error", "No se pudo registrar el pago."); return; }
+            await fetchAllRecipes(currentYear);
+        } catch { Alert.alert("Error", "No se pudo conectar al servidor."); }
     };
 
-    const isReady = !isLoading && !depsLoading;
-    const getDeptName = (depId: number) =>
-        departments.find(d => d.id === depId)?.name ?? "Departamento";
-
-    // Calcular recetas del mes para SummaryBar
+    const isReady = !isLoading && !depsLoading && !fundLoading;
+    const getDeptName = (depId: number) => departments.find(d => d.id === depId)?.name ?? "Departamento";
     const monthRecipesForSummary = useMemo(() =>
-        recipes.filter(r => r.month === selectedMonth.month && r.year === selectedMonth.year),
+        selectedMonth ? recipes.filter(r => r.month === selectedMonth.month && r.year === selectedMonth.year) : [],
         [recipes, selectedMonth]
     );
 
@@ -731,37 +631,43 @@ export default function AdminRecipesScreen() {
         <View style={styles.root}>
             <StatusBar barStyle="dark-content" backgroundColor={Colors.screen.bg} />
             <SafeAreaView style={{ flex: 1 }}>
-
                 <View style={styles.header}>
-                    <TouchableOpacity
-                        style={styles.backBtn}
-                        onPress={() => router.push("/(finance)" as any)}
-                        activeOpacity={0.7}
-                    >
+                    <TouchableOpacity style={styles.backBtn} onPress={() => router.push("/(finance)" as any)} activeOpacity={0.7}>
                         <Ionicons name="chevron-back" size={18} color={Colors.screen.textSecondary} />
                     </TouchableOpacity>
                     <View style={{ flex: 1 }}>
                         <Text style={styles.headerTitle}>Tablón de cuotas</Text>
-                        <Text style={styles.headerSubtitle}>Comprobantes por mes y departamento</Text>
+                        <Text style={styles.headerSubtitle}>Comprobantes por departamento</Text>
                     </View>
                 </View>
 
-                <View style={styles.tabsWrapper}>
-                    <ScrollView
-                        horizontal showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.tabsRow}
-                    >
-                        {MONTHS_LIST.map((m, i) => (
-                            <MonthTab
-                                key={m.key}
-                                label={`${m.month.slice(0, 3)} ${m.year}`}
-                                isActive={selectedMonthIdx === i}
-                                pendingCount={isReady ? (pendingCountByMonth[m.key] ?? 0) : 0}
-                                onPress={() => setSelectedMonthIdx(i)}
-                            />
-                        ))}
-                    </ScrollView>
-                </View>
+                {/* Tabs de meses */}
+                {fundLoading ? (
+                    <View style={styles.tabsLoading}>
+                        <ActivityIndicator size="small" color={Colors.primary.main} />
+                        <Text style={styles.tabsLoadingText}>Cargando períodos...</Text>
+                    </View>
+                ) : monthsList.length === 0 ? (
+                    <View style={styles.noFundBanner}>
+                        <Ionicons name="warning-outline" size={16} color={Colors.status.warning} />
+                        <Text style={styles.noFundText}>
+                            Configura el fondo inicial en "Cuota mensual" para ver los períodos disponibles.
+                        </Text>
+                    </View>
+                ) : (
+                    <View style={styles.tabsWrapper}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
+                            {monthsList.map((m, i) => (
+                                <MonthTab key={m.key}
+                                    label={`${m.month.slice(0, 3)} ${m.year}`}
+                                    isActive={selectedMonthIdx === i}
+                                    pendingCount={isReady ? (pendingCountByMonth[m.key] ?? 0) : 0}
+                                    onPress={() => setSelectedMonthIdx(i)}
+                                />
+                            ))}
+                        </ScrollView>
+                    </View>
+                )}
 
                 {!isReady ? (
                     <View style={styles.centered}>
@@ -772,26 +678,32 @@ export default function AdminRecipesScreen() {
                     <View style={styles.centered}>
                         <Ionicons name="cloud-offline-outline" size={32} color={Colors.screen.textMuted} />
                         <Text style={styles.stateText}>{error}</Text>
-                        <TouchableOpacity
-                            style={styles.retryBtn}
-                            onPress={() => fetchAllRecipes(selectedYear)}
-                        >
+                        <TouchableOpacity style={styles.retryBtn} onPress={() => fetchAllRecipes(currentYear)}>
                             <Ionicons name="refresh" size={14} color={Colors.primary.dark} />
                             <Text style={styles.retryText}>Reintentar</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : monthsList.length === 0 ? (
+                    <View style={styles.centered}>
+                        <Ionicons name="calendar-outline" size={36} color={Colors.screen.textMuted} />
+                        <Text style={styles.stateText}>
+                            No hay períodos disponibles.{"\n"}Configura el fondo inicial para comenzar.
+                        </Text>
+                        <TouchableOpacity style={styles.retryBtn} onPress={() => router.push("/(finance)/admin-quota" as any)}>
+                            <Ionicons name="settings-outline" size={14} color={Colors.primary.dark} />
+                            <Text style={styles.retryText}>Ir a configuración</Text>
                         </TouchableOpacity>
                     </View>
                 ) : (
                     <FlatList
                         data={departments}
-                        keyExtractor={(d) => String(d.id)}
+                        keyExtractor={d => String(d.id)}
                         contentContainerStyle={styles.list}
                         showsVerticalScrollIndicator={false}
                         ListHeaderComponent={
-                            <SummaryBar
-                                depts={departments}
-                                recipes={monthRecipesForSummary}
-                                amountExpected={monthlyAmountExpected}
-                            />
+                            selectedMonth ? (
+                                <SummaryBar depts={departments} recipes={monthRecipesForSummary} amountExpected={monthlyAmountExpected} />
+                            ) : null
                         }
                         ListEmptyComponent={
                             <View style={styles.emptyCard}>
@@ -803,48 +715,32 @@ export default function AdminRecipesScreen() {
                             const summary = deptSummaries.get(dept.id) ?? null;
                             const isValidating = summary?.latestRecipe ? validatingId === summary.latestRecipe.id : false;
                             return (
-                                <View style={{ opacity: isValidating ? 0.55 : 1 }}>
+                                <View style={{ opacity: isValidating ? 0.55 : 1, position: "relative" }}>
                                     {isValidating && (
                                         <View style={styles.validatingOverlay}>
                                             <ActivityIndicator size="small" color={Colors.primary.main} />
                                         </View>
                                     )}
-                                    <DeptRow
-                                        dept={dept}
-                                        summary={summary}
-                                        onValidate={handleValidate}
-                                        onViewReceipt={setSelectedRecipe}
-                                        onCashPayment={setCashTarget}
-                                    />
+                                    <DeptRow dept={dept} summary={summary}
+                                        onValidate={handleValidate} onViewReceipt={setSelectedRecipe} onCashPayment={setCashTarget} />
                                 </View>
                             );
                         }}
-                        onRefresh={() => fetchAllRecipes(selectedYear)}
+                        onRefresh={() => fetchAllRecipes(currentYear)}
                         refreshing={isLoading}
                     />
                 )}
             </SafeAreaView>
 
             {selectedRecipe && (
-                <ReceiptModal
-                    recipe={selectedRecipe}
-                    deptName={getDeptName(selectedRecipe.dep_id)}
-                    onClose={() => setSelectedRecipe(null)}
-                    onValidate={handleValidate}
-                />
+                <ReceiptModal recipe={selectedRecipe} deptName={getDeptName(selectedRecipe.dep_id)}
+                    onClose={() => setSelectedRecipe(null)} onValidate={handleValidate} />
             )}
-
-            {cashTarget && (
-                <CashPaymentModal
-                    dept={cashTarget}
-                    month={selectedMonth.month}
-                    year={selectedMonth.year}
+            {cashTarget && selectedMonth && (
+                <CashPaymentModal dept={cashTarget} month={selectedMonth.month} year={selectedMonth.year}
                     amountExpected={monthlyAmountExpected}
-                    onClose={() => setCashTarget(null)}
-                    onConfirm={handleCashPayment}
-                />
+                    onClose={() => setCashTarget(null)} onConfirm={handleCashPayment} />
             )}
-
             {viewingImage && (
                 <ImageViewer uri={viewingImage} onClose={() => setViewingImage(null)} />
             )}
@@ -852,13 +748,14 @@ export default function AdminRecipesScreen() {
     );
 }
 
+// ─── Estilos ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
     header: {
         flexDirection: "row", alignItems: "center", gap: 10,
         paddingHorizontal: 16, paddingVertical: 14,
-        backgroundColor: Colors.screen.card,
-        borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
+        backgroundColor: Colors.screen.card, borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
     },
     backBtn: {
         width: 36, height: 36, borderRadius: 10,
@@ -867,17 +764,23 @@ const styles = StyleSheet.create({
     },
     headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary },
     headerSubtitle: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
-    tabsWrapper: {
-        backgroundColor: Colors.screen.card,
-        borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
-    },
+    tabsWrapper: { backgroundColor: Colors.screen.card, borderBottomWidth: 1, borderBottomColor: Colors.screen.border },
     tabsRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 6 },
+    tabsLoading: {
+        flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+        backgroundColor: Colors.screen.card, borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
+        paddingVertical: 12,
+    },
+    tabsLoadingText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted },
+    noFundBanner: {
+        flexDirection: "row", alignItems: "flex-start", gap: 8,
+        backgroundColor: Colors.status.warningBg, borderBottomWidth: 1, borderBottomColor: Colors.status.warningBorder,
+        paddingHorizontal: 16, paddingVertical: 12,
+    },
+    noFundText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.status.warning, lineHeight: 17 },
     list: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 40, gap: 8 },
     centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
-    stateText: {
-        fontFamily: "Outfit_400Regular", fontSize: 13,
-        color: Colors.screen.textMuted, textAlign: "center",
-    },
+    stateText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: Colors.screen.textMuted, textAlign: "center" },
     retryBtn: {
         flexDirection: "row", alignItems: "center", gap: 6,
         paddingHorizontal: 16, paddingVertical: 9, borderRadius: 10,
@@ -885,29 +788,23 @@ const styles = StyleSheet.create({
     },
     retryText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.primary.dark },
     emptyCard: {
-        backgroundColor: Colors.screen.card, borderRadius: 16,
-        borderWidth: 1, borderColor: Colors.screen.border,
+        backgroundColor: Colors.screen.card, borderRadius: 16, borderWidth: 1, borderColor: Colors.screen.border,
         padding: 32, alignItems: "center", gap: 10, marginTop: 8,
     },
-    validatingOverlay: {
-        position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-        zIndex: 10, alignItems: "center", justifyContent: "center",
-    },
+    validatingOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, alignItems: "center", justifyContent: "center" },
 });
 
 const mtab = StyleSheet.create({
     root: {
         flexDirection: "row", alignItems: "center", gap: 5,
-        paddingHorizontal: 14, paddingVertical: 7,
-        borderRadius: 20, borderWidth: 1.5,
-        borderColor: Colors.screen.border, backgroundColor: Colors.screen.bg,
+        paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+        borderWidth: 1.5, borderColor: Colors.screen.border, backgroundColor: Colors.screen.bg,
     },
     rootActive: { borderColor: Colors.primary.main, backgroundColor: Colors.primary.soft },
     label: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.screen.textMuted },
     labelActive: { color: Colors.primary.dark },
     badge: {
-        minWidth: 18, height: 18, borderRadius: 9,
-        backgroundColor: Colors.screen.border,
+        minWidth: 18, height: 18, borderRadius: 9, backgroundColor: Colors.screen.border,
         alignItems: "center", justifyContent: "center", paddingHorizontal: 4,
     },
     badgeActive: { backgroundColor: Colors.status.error },
@@ -930,60 +827,29 @@ const drow = StyleSheet.create({
     deptIconMissing: { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
     deptInitial: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.primary.dark },
     info: { flex: 1, gap: 2 },
-    deptName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textPrimary },
-    amountsRow: { flexDirection: "row", alignItems: "center" },
+    deptName: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.screen.textPrimary },
     paidText: { fontFamily: "Outfit_700Bold", fontSize: 12 },
     expectedText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
     sub: { fontFamily: "Outfit_400Regular", fontSize: 11 },
-    missingBadge: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
-        backgroundColor: Colors.status.errorBg, borderWidth: 1, borderColor: Colors.status.errorBorder,
-    },
+    missingBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, backgroundColor: Colors.status.errorBg, borderWidth: 1, borderColor: Colors.status.errorBorder },
     missingText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: Colors.status.error },
-    partialBadge: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
-        backgroundColor: Colors.status.warningBg, borderWidth: 1, borderColor: Colors.status.warningBorder,
-    },
+    partialBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, backgroundColor: Colors.status.warningBg, borderWidth: 1, borderColor: Colors.status.warningBorder },
     partialText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: Colors.status.warning },
-    pendingBadge: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
-        backgroundColor: Colors.status.warningBg, borderWidth: 1, borderColor: Colors.status.warningBorder,
-    },
+    pendingBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, backgroundColor: Colors.status.warningBg, borderWidth: 1, borderColor: Colors.status.warningBorder },
     pendingText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: Colors.status.warning },
-    approvedBadge: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
-        backgroundColor: Colors.status.successBg, borderWidth: 1, borderColor: Colors.status.successBorder,
-    },
+    approvedBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, backgroundColor: Colors.status.successBg, borderWidth: 1, borderColor: Colors.status.successBorder },
     approvedText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: Colors.status.success },
-    cashBtn: {
-        width: 32, height: 32, borderRadius: 10,
-        backgroundColor: "#F0FDF4", borderWidth: 1, borderColor: "#BBF7D0",
-        alignItems: "center", justifyContent: "center", marginLeft: 4,
-    },
-    approveBtn: {
-        width: 32, height: 32, borderRadius: 10,
-        backgroundColor: Colors.status.successBg, borderWidth: 1, borderColor: Colors.status.successBorder,
-        alignItems: "center", justifyContent: "center", marginLeft: 4,
-    },
+    cashBtn: { width: 32, height: 32, borderRadius: 10, backgroundColor: "#F0FDF4", borderWidth: 1, borderColor: "#BBF7D0", alignItems: "center", justifyContent: "center", marginLeft: 4 },
+    approveBtn: { width: 32, height: 32, borderRadius: 10, backgroundColor: Colors.status.successBg, borderWidth: 1, borderColor: Colors.status.successBorder, alignItems: "center", justifyContent: "center", marginLeft: 4 },
 });
 
 const sbar = StyleSheet.create({
     root: {
-        backgroundColor: Colors.screen.card, borderRadius: 16,
-        borderWidth: 1, borderColor: Colors.screen.border,
-        marginBottom: 12, overflow: "hidden",
-        borderTopWidth: 3, borderTopColor: Colors.primary.main,
-        shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+        backgroundColor: Colors.screen.card, borderRadius: 16, borderWidth: 1, borderColor: Colors.screen.border,
+        marginBottom: 12, overflow: "hidden", borderTopWidth: 3, borderTopColor: Colors.primary.main,
+        shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
     },
-    amountRow: {
-        flexDirection: "row", alignItems: "center", gap: 8,
-        paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12,
-    },
+    amountRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 },
     amountLabel: { fontFamily: "Outfit_500Medium", fontSize: 13, color: Colors.screen.textSecondary, flex: 1 },
     amountValue: { fontFamily: "Outfit_800ExtraBold", fontSize: 18, color: Colors.primary.dark },
     expectedText: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.screen.textMuted, textAlign: "right" },
@@ -997,198 +863,76 @@ const sbar = StyleSheet.create({
 
 const rmodal = StyleSheet.create({
     overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" },
-    sheet: {
-        backgroundColor: Colors.screen.card,
-        borderTopLeftRadius: 24, borderTopRightRadius: 24,
-        paddingHorizontal: 20, paddingBottom: 36, maxHeight: "85%",
-        borderTopWidth: 1, borderTopColor: Colors.screen.border,
-    },
-    handle: {
-        width: 36, height: 4, borderRadius: 2,
-        backgroundColor: Colors.screen.border, alignSelf: "center",
-        marginTop: 12, marginBottom: 16,
-    },
+    sheet: { backgroundColor: Colors.screen.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 36, maxHeight: "85%", borderTopWidth: 1, borderTopColor: Colors.screen.border },
+    handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.screen.border, alignSelf: "center", marginTop: 12, marginBottom: 16 },
     header: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 },
-    avatar: {
-        width: 40, height: 40, borderRadius: 12, borderWidth: 1.5,
-        alignItems: "center", justifyContent: "center",
-    },
-    avatarText: { fontFamily: "Outfit_700Bold", fontSize: 16 },
+    avatar: { width: 38, height: 38, borderRadius: 11, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+    avatarText: { fontFamily: "Outfit_700Bold", fontSize: 15 },
     headerInfo: { flex: 1, gap: 2 },
-    deptName: { fontFamily: "Outfit_700Bold", fontSize: 15, color: Colors.screen.textPrimary },
-    period: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted },
-    statusPill: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1,
-    },
+    deptName: { fontFamily: "Outfit_700Bold", fontSize: 14, color: Colors.screen.textPrimary },
+    period: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
+    statusPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
     statusText: { fontFamily: "Outfit_600SemiBold", fontSize: 10 },
-    closeBtn: {
-        width: 32, height: 32, borderRadius: 10,
-        backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
-        alignItems: "center", justifyContent: "center",
-    },
-    amountsCard: {
-        flexDirection: "row", alignItems: "center",
-        backgroundColor: Colors.screen.bg, borderRadius: 12,
-        borderWidth: 1, borderColor: Colors.screen.border,
-        marginBottom: 12, overflow: "hidden",
-    },
+    closeBtn: { width: 30, height: 30, borderRadius: 9, backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border, alignItems: "center", justifyContent: "center" },
+    amountsCard: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.screen.bg, borderRadius: 12, borderWidth: 1, borderColor: Colors.screen.border, marginBottom: 12, overflow: "hidden" },
     amountItem: { flex: 1, alignItems: "center", paddingVertical: 12 },
     amountDivider: { width: 1, height: 40, backgroundColor: Colors.screen.border },
-    amountItemLabel: {
-        fontFamily: "Outfit_700Bold", fontSize: 9,
-        color: Colors.screen.textMuted, letterSpacing: 1.2, marginBottom: 4,
-    },
+    amountItemLabel: { fontFamily: "Outfit_700Bold", fontSize: 9, color: Colors.screen.textMuted, letterSpacing: 1.2, marginBottom: 4 },
     amountItemValue: { fontFamily: "Outfit_700Bold", fontSize: 16 },
-    partialAlert: {
-        flexDirection: "row", alignItems: "center", gap: 8,
-        backgroundColor: Colors.status.warningBg, borderRadius: 10,
-        borderWidth: 1, borderColor: Colors.status.warningBorder,
-        paddingHorizontal: 12, paddingVertical: 9, marginBottom: 12,
-    },
+    partialAlert: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.status.warningBg, borderRadius: 10, borderWidth: 1, borderColor: Colors.status.warningBorder, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 12 },
     partialAlertText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.warning },
-    section: { marginBottom: 16 },
-    sectionLabel: {
-        fontFamily: "Outfit_700Bold", fontSize: 10,
-        color: Colors.screen.textMuted, letterSpacing: 1.4,
-        textTransform: "uppercase", marginBottom: 10,
-    },
+    section: { marginBottom: 14 },
+    sectionLabel: { fontFamily: "Outfit_700Bold", fontSize: 10, color: Colors.screen.textMuted, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 },
     img: { width: "100%", height: 200, borderRadius: 12 },
-    imgOverlay: {
-        position: "absolute", bottom: 0, left: 0, right: 0,
-        flexDirection: "row", alignItems: "center", justifyContent: "center",
-        gap: 6, paddingVertical: 8, backgroundColor: "rgba(0,0,0,0.38)",
-        borderBottomLeftRadius: 12, borderBottomRightRadius: 12,
-    },
+    imgOverlay: { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 8, backgroundColor: "rgba(0,0,0,0.38)", borderBottomLeftRadius: 12, borderBottomRightRadius: 12 },
     imgOverlayText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: "#fff" },
-    pdfRow: {
-        flexDirection: "row", alignItems: "center", gap: 12,
-        padding: 12, borderRadius: 10,
-        backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
-    },
-    pdfIcon: {
-        width: 44, height: 44, borderRadius: 10,
-        backgroundColor: "#fff", borderWidth: 1, borderColor: "#FECACA",
-        alignItems: "center", justifyContent: "center",
-    },
+    pdfRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 10, backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA" },
+    pdfIcon: { width: 42, height: 42, borderRadius: 10, backgroundColor: "#fff", borderWidth: 1, borderColor: "#FECACA", alignItems: "center", justifyContent: "center" },
     pdfLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.screen.textPrimary },
     pdfHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
-    noImg: {
-        height: 56, borderRadius: 10, borderWidth: 1.5,
-        borderColor: Colors.screen.border, borderStyle: "dashed",
-        flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    },
+    noImg: { height: 52, borderRadius: 10, borderWidth: 1.5, borderColor: Colors.screen.border, borderStyle: "dashed", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
     noImgText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted },
     actions: { flexDirection: "row", gap: 10, marginTop: 4, marginBottom: 8 },
-    actionBtn: {
-        flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
-        gap: 8, paddingVertical: 14, borderRadius: 12, borderWidth: 1.5,
-    },
+    actionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 13, borderRadius: 12, borderWidth: 1.5 },
     approveBtn: { backgroundColor: Colors.status.successBg, borderColor: Colors.status.successBorder },
     rejectBtn: { backgroundColor: Colors.status.errorBg, borderColor: Colors.status.errorBorder },
     actionBtnText: { fontFamily: "Outfit_700Bold", fontSize: 14 },
 });
 
 const viewer = StyleSheet.create({
-    overlay: {
-        flex: 1, backgroundColor: "rgba(0,0,0,0.92)",
-        alignItems: "center", justifyContent: "center",
-    },
-    closeBtn: {
-        position: "absolute", top: 52, right: 20, zIndex: 10,
-        width: 40, height: 40, borderRadius: 20,
-        backgroundColor: "rgba(255,255,255,0.12)",
-        alignItems: "center", justifyContent: "center",
-    },
+    overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", alignItems: "center", justifyContent: "center" },
+    closeBtn: { position: "absolute", top: 52, right: 20, zIndex: 10, width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" },
     img: { width: "92%", height: "75%" },
 });
 
 const cash = StyleSheet.create({
     overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" },
-    sheet: {
-        backgroundColor: Colors.screen.card,
-        borderTopLeftRadius: 26, borderTopRightRadius: 26,
-        paddingHorizontal: 20, paddingBottom: 36,
-        borderTopWidth: 1, borderTopColor: Colors.screen.border,
-    },
-    handle: {
-        width: 36, height: 4, borderRadius: 2,
-        backgroundColor: Colors.screen.border, alignSelf: "center",
-        marginTop: 12, marginBottom: 18,
-    },
+    sheet: { backgroundColor: Colors.screen.card, borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingBottom: 36, borderTopWidth: 1, borderTopColor: Colors.screen.border },
+    handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.screen.border, alignSelf: "center", marginTop: 12, marginBottom: 18 },
     header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
-    headerIconWrap: {
-        width: 44, height: 44, borderRadius: 13,
-        backgroundColor: "#F0FDF4", borderWidth: 1.5, borderColor: "#BBF7D0",
-        alignItems: "center", justifyContent: "center",
-    },
+    headerIconWrap: { width: 44, height: 44, borderRadius: 13, backgroundColor: "#F0FDF4", borderWidth: 1.5, borderColor: "#BBF7D0", alignItems: "center", justifyContent: "center" },
     headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary },
     headerSub: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 1 },
-    closeBtn: {
-        width: 32, height: 32, borderRadius: 10,
-        backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
-        alignItems: "center", justifyContent: "center",
-    },
+    closeBtn: { width: 32, height: 32, borderRadius: 10, backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border, alignItems: "center", justifyContent: "center" },
     infoRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
-    infoPill: {
-        flexDirection: "row", alignItems: "center", gap: 6,
-        flex: 1, paddingHorizontal: 12, paddingVertical: 9,
-        backgroundColor: Colors.primary.soft, borderRadius: 12,
-        borderWidth: 1, borderColor: Colors.primary.muted,
-    },
+    infoPill: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: Colors.primary.soft, borderRadius: 12, borderWidth: 1, borderColor: Colors.primary.muted },
     infoPillText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.dark, flex: 1 },
-    expectedNote: {
-        flexDirection: "row", alignItems: "center", gap: 6,
-        backgroundColor: "#F0F9FF", borderRadius: 8,
-        borderWidth: 1, borderColor: "#BAE6FD",
-        paddingHorizontal: 10, paddingVertical: 7, marginBottom: 12,
-    },
+    expectedNote: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#F0F9FF", borderRadius: 8, borderWidth: 1, borderColor: "#BAE6FD", paddingHorizontal: 10, paddingVertical: 7, marginBottom: 12 },
     expectedNoteText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: "#0C4A6E" },
     divider: { height: 1, backgroundColor: Colors.screen.border, marginBottom: 18 },
     fieldWrap: { marginBottom: 14 },
-    fieldLabel: {
-        fontFamily: "Outfit_700Bold", fontSize: 11,
-        color: Colors.screen.textSecondary, letterSpacing: 1.2,
-        textTransform: "uppercase", marginBottom: 8,
-    },
-    inputRow: {
-        flexDirection: "row", alignItems: "center",
-        height: 60, borderRadius: 14,
-        borderWidth: 2, borderColor: "#16A34A",
-        backgroundColor: "#F0FDF4", paddingHorizontal: 16, gap: 6,
-    },
+    fieldLabel: { fontFamily: "Outfit_700Bold", fontSize: 11, color: Colors.screen.textSecondary, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 },
+    inputRow: { flexDirection: "row", alignItems: "center", height: 60, borderRadius: 14, borderWidth: 2, borderColor: "#16A34A", backgroundColor: "#F0FDF4", paddingHorizontal: 16, gap: 6 },
     inputRowError: { borderColor: Colors.status.error, backgroundColor: Colors.status.errorBg },
-    currencySymbol: { fontFamily: "Outfit_800ExtraBold", fontSize: 26, color: "#16A34A" },
-    input: { flex: 1, fontFamily: "Outfit_800ExtraBold", fontSize: 30, color: Colors.screen.textPrimary },
+    currencySymbol: { fontFamily: "Outfit_800ExtraBold", fontSize: 24, color: "#16A34A" },
+    input: { flex: 1, fontFamily: "Outfit_800ExtraBold", fontSize: 28, color: Colors.screen.textPrimary },
     errorRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6 },
     errorText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.error },
-    notice: {
-        flexDirection: "row", alignItems: "flex-start", gap: 8,
-        backgroundColor: Colors.primary.soft, borderRadius: 10,
-        borderWidth: 1, borderColor: Colors.primary.muted,
-        paddingHorizontal: 12, paddingVertical: 10, marginBottom: 20,
-    },
+    notice: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: Colors.primary.soft, borderRadius: 10, borderWidth: 1, borderColor: Colors.primary.muted, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 20 },
     noticeText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.primary.dark, lineHeight: 17 },
     actions: { flexDirection: "row", gap: 10 },
-    cancelBtn: {
-        flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center",
-        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
-    },
+    cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center", backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border },
     cancelText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
-    confirmBtn: {
-        flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center",
-        gap: 8, paddingVertical: 14, borderRadius: 12,
-        backgroundColor: "#16A34A",
-        shadowColor: "#16A34A", shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
-    },
+    confirmBtn: { flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: "#16A34A", shadowColor: "#16A34A", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6 },
     confirmText: { fontFamily: "Outfit_700Bold", fontSize: 15, color: "#fff" },
 });
-
-interface DeptPaymentSummary {
-    totalPaid: number;
-    expected: number;
-    payments: Recipe[];
-    isPartial: boolean;
-    latestRecipe: Recipe | null;
-}

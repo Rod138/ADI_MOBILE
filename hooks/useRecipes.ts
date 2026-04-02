@@ -8,7 +8,7 @@ export interface Recipe {
     month: string;
     amount_paid: number;
     amount_expected: number;
-    img: string | null;
+    url_image: string | null;
     validated: boolean | null;
     created_at: string;
     departments?: { name: string } | null;
@@ -20,7 +20,7 @@ export interface CreateRecipePayload {
     month: string;
     amount_paid: number;
     amount_expected: number;
-    img: string | null;
+    url_image: string | null;
     validated: boolean | null;
 }
 
@@ -45,12 +45,49 @@ export const MONTH_ORDER: Record<string, number> = {
     Septiembre: 9, Octubre: 10, Noviembre: 11, Diciembre: 12,
 };
 
+const MONTH_NAMES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+export function getCurrentMonthName(): string {
+    return MONTH_NAMES[new Date().getMonth()];
+}
+
+export function getCurrentYear(): number {
+    return new Date().getFullYear();
+}
+
 export function useRecipes() {
     const [recipes, setRecipes] = useState<Recipe[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // ── Fetch del departamento del usuario actual 
+    // ── Fetch SOLO el mes actual del depto (vista residente) ──────────────────
+    const fetchMyCurrentMonthRecipes = async (depId: number) => {
+        const month = getCurrentMonthName();
+        const year = getCurrentYear();
+        setIsLoading(true);
+        setError(null);
+        try {
+            const { data, error: dbError } = await supabase
+                .from("recipes_payment")
+                .select("*, departments ( name )")
+                .eq("dep_id", depId)
+                .eq("month", month)
+                .eq("year", year)
+                .order("created_at", { ascending: false });
+
+            if (dbError) { setError("Error al cargar los comprobantes."); return; }
+            setRecipes((data as Recipe[]) ?? []);
+        } catch {
+            setError("No se pudo conectar al servidor.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // ── Fetch de todos los del depto (historial completo si se necesita) ──────
     const fetchMyRecipes = async (depId: number) => {
         setIsLoading(true);
         setError(null);
@@ -71,7 +108,7 @@ export function useRecipes() {
         }
     };
 
-    // ── Fetch de todos (admin/tesorero) 
+    // ── Fetch de todos (admin/tesorero), filtrado por year ───────────────────
     const fetchAllRecipes = async (year?: number) => {
         setIsLoading(true);
         setError(null);
@@ -94,7 +131,7 @@ export function useRecipes() {
         }
     };
 
-    // ── Crear comprobante / pago 
+    // ── Crear comprobante / pago ─────────────────────────────────────────────
     const createRecipe = async (payload: CreateRecipePayload): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
@@ -118,7 +155,7 @@ export function useRecipes() {
         }
     };
 
-    // ── Validar (aprobar / rechazar) 
+    // ── Validar (aprobar / rechazar) ─────────────────────────────────────────
     const validateRecipe = async (id: number, validated: boolean): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
@@ -129,10 +166,7 @@ export function useRecipes() {
                 .eq("id", id);
 
             if (dbError) { setError(dbError.message); return false; }
-
-            setRecipes(prev =>
-                prev.map(r => r.id === id ? { ...r, validated } : r)
-            );
+            setRecipes(prev => prev.map(r => r.id === id ? { ...r, validated } : r));
             return true;
         } catch {
             setError("No se pudo conectar al servidor.");
@@ -142,7 +176,7 @@ export function useRecipes() {
         }
     };
 
-    // ── Eliminar 
+    // ── Eliminar ─────────────────────────────────────────────────────────────
     const deleteRecipe = async (id: number): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
@@ -165,7 +199,11 @@ export function useRecipes() {
 
     return {
         recipes, isLoading, error,
-        fetchMyRecipes, fetchAllRecipes,
-        createRecipe, validateRecipe, deleteRecipe,
+        fetchMyCurrentMonthRecipes,
+        fetchMyRecipes,
+        fetchAllRecipes,
+        createRecipe,
+        validateRecipe,
+        deleteRecipe,
     };
 }

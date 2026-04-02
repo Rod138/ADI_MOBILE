@@ -4,7 +4,7 @@ import { useState } from "react";
 export interface TowerFund {
     id: number;
     initial_amount: number;
-    updated_at: string;
+    updated_at: string; // fecha desde la cual se empieza a calcular el balance
 }
 
 export function useTowerFund() {
@@ -12,7 +12,7 @@ export function useTowerFund() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Fetch el registro único del fondo 
+    // ── Fetch el registro único del fondo ────────────────────────────────────
     const fetchFund = async (): Promise<TowerFund | null> => {
         setIsLoading(true);
         setError(null);
@@ -24,10 +24,7 @@ export function useTowerFund() {
                 .limit(1)
                 .maybeSingle();
 
-            if (dbError) {
-                setError("Error al cargar el fondo.");
-                return null;
-            }
+            if (dbError) { setError("Error al cargar el fondo."); return null; }
             setFund(data as TowerFund | null);
             return data as TowerFund | null;
         } catch {
@@ -38,23 +35,19 @@ export function useTowerFund() {
         }
     };
 
-    // Actualizar monto inicial del fondo 
-    const updateFund = async (amount: number): Promise<boolean> => {
-        if (!fund) return false;
+    // ── Crear el fondo por primera vez ───────────────────────────────────────
+    const initFund = async (amount: number, startDate: string): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
         try {
-            const now = new Date().toISOString();
-            const { error: dbError } = await supabase
+            const { data, error: dbError } = await supabase
                 .from("tower_fund")
-                .update({ initial_amount: amount, updated_at: now })
-                .eq("id", fund.id);
+                .insert([{ initial_amount: amount, updated_at: startDate }])
+                .select()
+                .single();
 
-            if (dbError) {
-                setError(dbError.message);
-                return false;
-            }
-            setFund({ ...fund, initial_amount: amount, updated_at: now });
+            if (dbError) { setError(dbError.message); return false; }
+            setFund(data as TowerFund);
             return true;
         } catch {
             setError("No se pudo conectar al servidor.");
@@ -64,5 +57,34 @@ export function useTowerFund() {
         }
     };
 
-    return { fund, isLoading, error, fetchFund, updateFund };
+    // ── Actualizar monto y/o fecha de inicio del fondo ───────────────────────
+    const updateFund = async (amount: number, startDate?: string): Promise<boolean> => {
+        if (!fund) return false;
+        setIsLoading(true);
+        setError(null);
+        try {
+            const payload: Record<string, unknown> = { initial_amount: amount };
+            if (startDate) payload.updated_at = startDate;
+
+            const { error: dbError } = await supabase
+                .from("tower_fund")
+                .update(payload)
+                .eq("id", fund.id);
+
+            if (dbError) { setError(dbError.message); return false; }
+            setFund({
+                ...fund,
+                initial_amount: amount,
+                updated_at: startDate ?? fund.updated_at,
+            });
+            return true;
+        } catch {
+            setError("No se pudo conectar al servidor.");
+            return false;
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return { fund, isLoading, error, fetchFund, initFund, updateFund };
 }

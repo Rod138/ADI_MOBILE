@@ -1,9 +1,8 @@
-import InputField from "@/components/InputField";
 import PrimaryButton from "@/components/PrimaryButton";
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
 import { useMonthlyQuota } from "@/hooks/useMonthlyQuota";
-import { MONTH_ORDER, MONTHS, useRecipes, type Recipe } from "@/hooks/useRecipes";
+import { getCurrentMonthName, getCurrentYear, useRecipes, type Recipe } from "@/hooks/useRecipes";
 import { uploadFile } from "@/lib/cloudinary";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
@@ -21,12 +20,18 @@ import {
     StatusBar,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-//  Helpers 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const CURRENT_MONTH = getCurrentMonthName();
+const CURRENT_YEAR = getCurrentYear();
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getValidationStyle(validated: boolean | null) {
     if (validated === true)
@@ -40,222 +45,9 @@ function formatCurrency(n: number) {
     return `$${Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-const CURRENT_YEAR = new Date().getFullYear();
-const YEARS = [CURRENT_YEAR];
+interface AttachedFile { uri: string; name: string; type: "image" | "pdf"; }
 
-interface AttachedFile {
-    uri: string;
-    name: string;
-    type: "image" | "pdf";
-}
-
-//  Receipt Card 
-
-function ReceiptCard({
-    item,
-    onDelete,
-    onViewImage,
-}: {
-    item: Recipe;
-    onDelete?: (id: number) => void;
-    onViewImage: (url: string) => void;
-}) {
-    const vs = getValidationStyle(item.validated ?? null);
-    const isPdf = item.img?.toLowerCase().includes(".pdf") || item.img?.includes("/raw/");
-    const isPartial = item.amount_paid < item.amount_expected;
-
-    return (
-        <View style={card.root}>
-            <View style={[card.accentBar, { backgroundColor: vs.color }]} />
-            <View style={card.inner}>
-                {/* Header */}
-                <View style={card.header}>
-                    <View style={{ flexDirection: "row", gap: 6, flex: 1, flexWrap: "wrap" }}>
-                        <View style={[card.monthBadge, { backgroundColor: vs.bg, borderColor: vs.border }]}>
-                            <Ionicons name="calendar" size={14} color={vs.color} />
-                            <Text style={[card.monthText, { color: vs.color }]}>
-                                {item.month} {item.year}
-                            </Text>
-                        </View>
-                        {isPartial && (
-                            <View style={[card.monthBadge, { backgroundColor: Colors.status.warningBg, borderColor: Colors.status.warningBorder }]}>
-                                <Ionicons name="pie-chart-outline" size={12} color={Colors.status.warning} />
-                                <Text style={[card.monthText, { color: Colors.status.warning, fontSize: 10 }]}>Parcial</Text>
-                            </View>
-                        )}
-                    </View>
-                    <View style={[card.statusBadge, { backgroundColor: vs.bg, borderColor: vs.border }]}>
-                        <Ionicons name={vs.icon} size={12} color={vs.color} />
-                        <Text style={[card.statusText, { color: vs.color }]}>{vs.label}</Text>
-                    </View>
-                </View>
-
-                {/* Montos */}
-                <View style={card.amountsRow}>
-                    <View style={card.amountItem}>
-                        <Text style={card.amountLabel}>PAGADO</Text>
-                        <Text style={[card.amountValue, { color: Colors.primary.dark }]}>
-                            {formatCurrency(item.amount_paid)}
-                        </Text>
-                    </View>
-                    <View style={card.amountDivider} />
-                    <View style={card.amountItem}>
-                        <Text style={card.amountLabel}>ESPERADO</Text>
-                        <Text style={[card.amountValue, { color: Colors.screen.textSecondary }]}>
-                            {formatCurrency(item.amount_expected)}
-                        </Text>
-                    </View>
-                    {isPartial && (
-                        <>
-                            <View style={card.amountDivider} />
-                            <View style={card.amountItem}>
-                                <Text style={card.amountLabel}>PENDIENTE</Text>
-                                <Text style={[card.amountValue, { color: Colors.status.error, fontSize: 13 }]}>
-                                    {formatCurrency(item.amount_expected - item.amount_paid)}
-                                </Text>
-                            </View>
-                        </>
-                    )}
-                </View>
-
-                {/* Comprobante */}
-                {item.img ? (
-                    isPdf ? (
-                        <TouchableOpacity
-                            style={card.pdfPreview}
-                            activeOpacity={0.85}
-                            onPress={() => Linking.openURL(item.img!)}
-                        >
-                            <View style={card.pdfIcon}>
-                                <Ionicons name="document-text" size={28} color={Colors.status.error} />
-                            </View>
-                            <View style={card.pdfInfo}>
-                                <Text style={card.pdfLabel}>Comprobante PDF</Text>
-                                <Text style={card.pdfHint}>Toca para abrir</Text>
-                            </View>
-                            <Ionicons name="open-outline" size={18} color={Colors.screen.textMuted} />
-                        </TouchableOpacity>
-                    ) : (
-                        <TouchableOpacity activeOpacity={0.85} onPress={() => onViewImage(item.img!)}>
-                            <Image source={{ uri: item.img }} style={card.img} resizeMode="cover" />
-                            <View style={card.imgOverlay}>
-                                <Ionicons name="expand-outline" size={18} color="#fff" />
-                                <Text style={card.imgOverlayText}>Ver comprobante</Text>
-                            </View>
-                        </TouchableOpacity>
-                    )
-                ) : (
-                    <View style={card.noImg}>
-                        <Ionicons name="cash-outline" size={18} color={Colors.screen.textMuted} />
-                        <Text style={card.noImgText}>Pago en efectivo registrado por admin</Text>
-                    </View>
-                )}
-
-                {/* Delete — solo si no está aprobado */}
-                {onDelete && item.validated !== true && (
-                    <TouchableOpacity style={card.deleteBtn} onPress={() => onDelete(item.id)} activeOpacity={0.7}>
-                        <Ionicons name="trash-outline" size={13} color={Colors.screen.textMuted} />
-                        <Text style={card.deleteBtnText}>Eliminar</Text>
-                    </TouchableOpacity>
-                )}
-            </View>
-        </View>
-    );
-}
-
-//  Month Picker 
-
-function MonthPicker({ value, year, onSelectMonth, onSelectYear, error, approvedMonths }: {
-    value: string;
-    year: number;
-    onSelectMonth: (m: string) => void;
-    onSelectYear: (y: number) => void;
-    error?: string;
-    approvedMonths: Set<string>;
-}) {
-    const [open, setOpen] = useState(false);
-
-    return (
-        <View style={mp.container}>
-            <Text style={mp.label}>MES Y AÑO</Text>
-            <TouchableOpacity
-                style={[mp.trigger, error && mp.triggerError]}
-                onPress={() => setOpen(true)}
-                activeOpacity={0.8}
-            >
-                <Ionicons name="calendar-outline" size={17} color={Colors.screen.iconMuted} style={{ marginRight: 10 }} />
-                <Text style={[mp.triggerText, !value && mp.placeholder]}>
-                    {value ? `${value} ${year}` : "Selecciona mes y año"}
-                </Text>
-                <Ionicons name="chevron-down" size={15} color={Colors.screen.iconMuted} />
-            </TouchableOpacity>
-            {error && (
-                <View style={mp.errorRow}>
-                    <Ionicons name="alert-circle-outline" size={12} color={Colors.status.error} />
-                    <Text style={mp.errorText}>{error}</Text>
-                </View>
-            )}
-            <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
-                <View style={mp.overlay}>
-                    <View style={mp.sheet}>
-                        <View style={mp.handle} />
-                        <Text style={mp.sheetTitle}>Selecciona período</Text>
-                        <View style={mp.yearRow}>
-                            {YEARS.map(y => (
-                                <TouchableOpacity
-                                    key={y}
-                                    style={[mp.yearBtn, year === y && mp.yearBtnActive]}
-                                    onPress={() => onSelectYear(y)}
-                                    activeOpacity={0.8}
-                                >
-                                    <Text style={[mp.yearBtnText, year === y && mp.yearBtnTextActive]}>{y}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                        <View style={mp.monthGrid}>
-                            {MONTHS.map(m => {
-                                const isApproved = approvedMonths.has(`${m.value}-${year}`);
-                                const isSelected = value === m.value;
-                                return (
-                                    <TouchableOpacity
-                                        key={m.value}
-                                        style={[
-                                            mp.monthBtn,
-                                            isSelected && mp.monthBtnActive,
-                                            isApproved && mp.monthBtnApproved,
-                                        ]}
-                                        onPress={() => {
-                                            if (isApproved) return;
-                                            onSelectMonth(m.value);
-                                            setOpen(false);
-                                        }}
-                                        activeOpacity={isApproved ? 1 : 0.8}
-                                    >
-                                        <Text style={[
-                                            mp.monthBtnText,
-                                            isSelected && mp.monthBtnTextActive,
-                                            isApproved && mp.monthBtnTextApproved,
-                                        ]}>
-                                            {m.label.slice(0, 3)}
-                                        </Text>
-                                        {isApproved && (
-                                            <Ionicons name="checkmark-circle" size={10} color={Colors.status.success} />
-                                        )}
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
-                        <TouchableOpacity style={mp.cancelBtn} onPress={() => setOpen(false)}>
-                            <Text style={mp.cancelText}>Cancelar</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
-        </View>
-    );
-}
-
-//  Image Viewer 
+// ── Image Viewer ──────────────────────────────────────────────────────────────
 
 function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
     return (
@@ -270,57 +62,156 @@ function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
     );
 }
 
-//  Upload Form 
+// ── Receipt Card ──────────────────────────────────────────────────────────────
+
+function ReceiptCard({
+    item, onDelete, onViewImage,
+}: {
+    item: Recipe; onDelete?: (id: number) => void; onViewImage: (url: string) => void;
+}) {
+    const vs = getValidationStyle(item.validated ?? null);
+    const isPdf = item.url_image?.toLowerCase().includes(".pdf") || item.url_image?.includes("/raw/");
+    const isPartial = item.amount_paid < item.amount_expected;
+
+    return (
+        <View style={card.root}>
+            <View style={[card.accentBar, { backgroundColor: vs.color }]} />
+            <View style={card.inner}>
+                {/* Status + período */}
+                <View style={card.header}>
+                    <View style={[card.monthBadge, { backgroundColor: vs.bg, borderColor: vs.border }]}>
+                        <Ionicons name="calendar" size={13} color={vs.color} />
+                        <Text style={[card.monthText, { color: vs.color }]}>
+                            {item.month} {item.year}
+                        </Text>
+                    </View>
+                    {isPartial && (
+                        <View style={[card.monthBadge, { backgroundColor: Colors.status.warningBg, borderColor: Colors.status.warningBorder }]}>
+                            <Ionicons name="pie-chart-outline" size={11} color={Colors.status.warning} />
+                            <Text style={[card.monthText, { color: Colors.status.warning, fontSize: 10 }]}>Parcial</Text>
+                        </View>
+                    )}
+                    <View style={{ flex: 1 }} />
+                    <View style={[card.statusBadge, { backgroundColor: vs.bg, borderColor: vs.border }]}>
+                        <Ionicons name={vs.icon} size={12} color={vs.color} />
+                        <Text style={[card.statusText, { color: vs.color }]}>{vs.label}</Text>
+                    </View>
+                </View>
+
+                {/* Montos */}
+                <View style={card.amountsRow}>
+                    <View style={card.amountItem}>
+                        <Text style={card.amountLabel}>PAGADO</Text>
+                        <Text style={[card.amountValue, { color: Colors.primary.dark }]}>
+                            {formatCurrency(item.amount_paid)}
+                        </Text>
+                    </View>
+                    {item.amount_expected > 0 && (
+                        <>
+                            <View style={card.amountDivider} />
+                            <View style={card.amountItem}>
+                                <Text style={card.amountLabel}>CUOTA</Text>
+                                <Text style={[card.amountValue, { color: Colors.screen.textSecondary }]}>
+                                    {formatCurrency(item.amount_expected)}
+                                </Text>
+                            </View>
+                            {isPartial && (
+                                <>
+                                    <View style={card.amountDivider} />
+                                    <View style={card.amountItem}>
+                                        <Text style={card.amountLabel}>RESTA</Text>
+                                        <Text style={[card.amountValue, { color: Colors.status.error, fontSize: 13 }]}>
+                                            {formatCurrency(item.amount_expected - item.amount_paid)}
+                                        </Text>
+                                    </View>
+                                </>
+                            )}
+                        </>
+                    )}
+                </View>
+
+                {/* Comprobante */}
+                {item.url_image ? (
+                    isPdf ? (
+                        <TouchableOpacity style={card.pdfPreview} activeOpacity={0.85} onPress={() => Linking.openURL(item.url_image!)}>
+                            <View style={card.pdfIcon}>
+                                <Ionicons name="document-text" size={24} color={Colors.status.error} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={card.pdfLabel}>Comprobante PDF</Text>
+                                <Text style={card.pdfHint}>Toca para abrir</Text>
+                            </View>
+                            <Ionicons name="open-outline" size={16} color={Colors.screen.textMuted} />
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity activeOpacity={0.85} onPress={() => onViewImage(item.url_image!)}>
+                            <Image source={{ uri: item.url_image }} style={card.img} resizeMode="cover" />
+                            <View style={card.imgOverlay}>
+                                <Ionicons name="expand-outline" size={16} color="#fff" />
+                                <Text style={card.imgOverlayText}>Ver comprobante</Text>
+                            </View>
+                        </TouchableOpacity>
+                    )
+                ) : (
+                    <View style={card.noImg}>
+                        <Ionicons name="cash-outline" size={16} color={Colors.screen.textMuted} />
+                        <Text style={card.noImgText}>Pago en efectivo registrado por admin</Text>
+                    </View>
+                )}
+
+                {/* Nota si fue rechazado */}
+                {item.validated === false && (
+                    <View style={card.rejectedNote}>
+                        <Ionicons name="alert-circle-outline" size={14} color={Colors.status.error} />
+                        <Text style={card.rejectedNoteText}>
+                            Comprobante rechazado. Puedes eliminarlo y subir uno nuevo.
+                        </Text>
+                    </View>
+                )}
+
+                {/* Eliminar */}
+                {onDelete && item.validated !== true && (
+                    <TouchableOpacity style={card.deleteBtn} onPress={() => onDelete(item.id)} activeOpacity={0.7}>
+                        <Ionicons name="trash-outline" size={13} color={Colors.screen.textMuted} />
+                        <Text style={card.deleteBtnText}>Eliminar</Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+        </View>
+    );
+}
+
+// ── Upload Form ───────────────────────────────────────────────────────────────
 
 function UploadForm({
     depId,
-    existingMonths,
-    approvedMonths,
+    amountExpected,
     onSuccess,
 }: {
     depId: number;
-    existingMonths: Set<string>;
-    approvedMonths: Set<string>;
+    amountExpected: number;
     onSuccess: () => void;
 }) {
     const { createRecipe, isLoading } = useRecipes();
-    const { fetchQuota } = useMonthlyQuota();
-
-    const [month, setMonth] = useState("");
-    const [year, setYear] = useState(CURRENT_YEAR);
-    const [amount, setAmount] = useState("");
-    const [amountExpected, setAmountExpected] = useState(0);
+    const [amount, setAmount] = useState(amountExpected > 0 ? String(amountExpected) : "");
+    const [amountError, setAmountError] = useState<string | undefined>();
     const [file, setFile] = useState<AttachedFile | null>(null);
+    const [fileError, setFileError] = useState<string | undefined>();
     const [uploading, setUploading] = useState(false);
-    const [loadingQuota, setLoadingQuota] = useState(false);
-    const [errors, setErrors] = useState<{ month?: string; file?: string; amount?: string }>({});
 
-    // Cuando cambia el mes, intentar pre-llenar con la cuota configurada
-    const handleMonthSelect = async (m: string) => {
-        setMonth(m);
-        setErrors(p => ({ ...p, month: undefined }));
-        setLoadingQuota(true);
-        const q = await fetchQuota(m, year);
-        setLoadingQuota(false);
-        if (q) {
-            setAmount(String(q.amount));
-            setAmountExpected(q.amount);
-        } else {
-            setAmountExpected(0);
-        }
-    };
+    // Actualizar monto si cambia la cuota esperada
+    useEffect(() => {
+        if (amountExpected > 0 && !amount) setAmount(String(amountExpected));
+    }, [amountExpected]);
 
     const pickImage = async () => {
         const p = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!p.granted) { Alert.alert("Permiso requerido", "Necesitamos acceso a tu galería."); return; }
-        const r = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true, aspect: [3, 4], quality: 0.85,
-        });
+        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [3, 4], quality: 0.85 });
         if (!r.canceled && r.assets[0]) {
             const asset = r.assets[0];
             setFile({ uri: asset.uri, name: asset.uri.split("/").pop() ?? "imagen.jpg", type: "image" });
-            setErrors(p => ({ ...p, file: undefined }));
+            setFileError(undefined);
         }
     };
 
@@ -331,21 +222,19 @@ function UploadForm({
         if (!r.canceled && r.assets[0]) {
             const asset = r.assets[0];
             setFile({ uri: asset.uri, name: asset.uri.split("/").pop() ?? "foto.jpg", type: "image" });
-            setErrors(p => ({ ...p, file: undefined }));
+            setFileError(undefined);
         }
     };
 
     const pickPdf = async () => {
         try {
             const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true });
-            if (!result.canceled && result.assets && result.assets.length > 0) {
+            if (!result.canceled && result.assets?.[0]) {
                 const asset = result.assets[0];
                 setFile({ uri: asset.uri, name: asset.name ?? "comprobante.pdf", type: "pdf" });
-                setErrors(p => ({ ...p, file: undefined }));
+                setFileError(undefined);
             }
-        } catch {
-            Alert.alert("Error", "No se pudo seleccionar el PDF.");
-        }
+        } catch { Alert.alert("Error", "No se pudo seleccionar el PDF."); }
     };
 
     const showFileOptions = () =>
@@ -357,21 +246,14 @@ function UploadForm({
         ]);
 
     const validate = () => {
-        const e: typeof errors = {};
-        if (!month) {
-            e.month = "Selecciona el mes de la cuota.";
-        } else if (approvedMonths.has(`${month}-${year}`)) {
-            e.month = "La cuota de este mes ya fue aprobada.";
+        let valid = true;
+        if (!amount.trim()) { setAmountError("Ingresa el monto que estás pagando."); valid = false; }
+        else {
+            const n = parseFloat(amount);
+            if (isNaN(n) || n <= 0) { setAmountError("El monto debe ser mayor a 0."); valid = false; }
         }
-        if (!amount.trim()) {
-            e.amount = "Introduce el monto que estás pagando.";
-        } else {
-            const parsed = parseInt(amount, 10);
-            if (isNaN(parsed) || parsed <= 0) e.amount = "El monto debe ser mayor a 0.";
-        }
-        if (!file) e.file = "Adjunta el comprobante (imagen o PDF).";
-        setErrors(e);
-        return Object.keys(e).length === 0;
+        if (!file) { setFileError("Adjunta el comprobante (imagen o PDF)."); valid = false; }
+        return valid;
     };
 
     const handleSubmit = async () => {
@@ -390,16 +272,16 @@ function UploadForm({
         const parsedAmount = parseFloat(amount.replace(/,/g, ""));
         const ok = await createRecipe({
             dep_id: depId,
-            year,
-            month,
+            year: CURRENT_YEAR,
+            month: CURRENT_MONTH,
             amount_paid: parsedAmount,
             amount_expected: amountExpected > 0 ? amountExpected : parsedAmount,
-            img: fileUrl,
+            url_image: fileUrl,
             validated: null,
         });
 
         if (ok) {
-            setMonth(""); setAmount(""); setFile(null); setErrors({});
+            setAmount(""); setFile(null); setAmountError(undefined); setFileError(undefined);
             onSuccess();
         } else {
             Alert.alert("Error", "No se pudo guardar el comprobante. Intenta de nuevo.");
@@ -412,60 +294,48 @@ function UploadForm({
                 <View style={form.headerIcon}>
                     <Ionicons name="cloud-upload-outline" size={20} color={Colors.primary.main} />
                 </View>
-                <View>
+                <View style={{ flex: 1 }}>
                     <Text style={form.headerTitle}>Subir comprobante</Text>
-                    <Text style={form.headerSubtitle}>Cuota mensual de mantenimiento</Text>
+                    <Text style={form.headerSubtitle}>{CURRENT_MONTH} {CURRENT_YEAR}</Text>
                 </View>
             </View>
 
-            <MonthPicker
-                value={month} year={year}
-                onSelectMonth={handleMonthSelect}
-                onSelectYear={setYear}
-                error={errors.month}
-                approvedMonths={approvedMonths}
-            />
-
-            {/* Cuota esperada (informativo) */}
-            {month && !loadingQuota && amountExpected > 0 && (
+            {/* Cuota esperada */}
+            {amountExpected > 0 && (
                 <View style={form.quotaNote}>
                     <Ionicons name="information-circle-outline" size={14} color="#0891B2" />
                     <Text style={form.quotaNoteText}>
-                        Cuota esperada para {month}: <Text style={{ fontFamily: "Outfit_700Bold" }}>{formatCurrency(amountExpected)}</Text>
+                        Cuota del mes:{" "}
+                        <Text style={{ fontFamily: "Outfit_700Bold" }}>{formatCurrency(amountExpected)}</Text>
                     </Text>
-                </View>
-            )}
-            {month && !loadingQuota && amountExpected === 0 && (
-                <View style={[form.quotaNote, { backgroundColor: Colors.status.warningBg, borderColor: Colors.status.warningBorder }]}>
-                    <Ionicons name="alert-circle-outline" size={14} color={Colors.status.warning} />
-                    <Text style={[form.quotaNoteText, { color: Colors.status.warning }]}>
-                        El admin no ha configurado la cuota para {month}. Puedes subir el comprobante de todos modos.
-                    </Text>
-                </View>
-            )}
-            {loadingQuota && (
-                <View style={form.loadingRow}>
-                    <ActivityIndicator size="small" color={Colors.primary.main} />
-                    <Text style={form.loadingText}>Consultando cuota del mes...</Text>
                 </View>
             )}
 
+            {/* Monto a pagar */}
             <View style={form.field}>
-                <InputField
-                    label="MONTO QUE ESTÁS PAGANDO"
-                    placeholder="Ej. 1500"
-                    keyboardType="numeric"
-                    leftIcon="cash-outline"
-                    maxLength={8}
-                    value={amount}
-                    onChangeText={(val) => {
-                        setAmount(val.replace(/[^0-9]/g, ""));
-                        setErrors(p => ({ ...p, amount: undefined }));
-                    }}
-                    error={errors.amount}
-                />
+                <Text style={form.fieldLabel}>MONTO QUE ESTÁS PAGANDO</Text>
+                <View style={[form.amountInput, amountError && form.amountInputError]}>
+                    <Text style={form.currencySymbol}>$</Text>
+                    <TextInput
+                        style={form.amountTextInput}
+                        placeholder="0"
+                        placeholderTextColor={Colors.screen.textMuted}
+                        keyboardType="decimal-pad"
+                        value={amount}
+                        onChangeText={t => { setAmount(t.replace(/[^0-9.]/g, "")); setAmountError(undefined); }}
+                        maxLength={8}
+                    />
+                    <Text style={form.mxnLabel}>MXN</Text>
+                </View>
+                {amountError && (
+                    <View style={form.errorRow}>
+                        <Ionicons name="alert-circle-outline" size={12} color={Colors.status.error} />
+                        <Text style={form.errorText}>{amountError}</Text>
+                    </View>
+                )}
             </View>
 
+            {/* Comprobante */}
             <View style={form.field}>
                 <Text style={form.fieldLabel}>COMPROBANTE</Text>
                 {file ? (
@@ -474,7 +344,7 @@ function UploadForm({
                             <Image source={{ uri: file.uri }} style={form.imgPreview} resizeMode="cover" />
                         ) : (
                             <View style={form.pdfPreview}>
-                                <Ionicons name="document-text" size={36} color={Colors.status.error} />
+                                <Ionicons name="document-text" size={32} color={Colors.status.error} />
                                 <View style={{ flex: 1 }}>
                                     <Text style={form.pdfName} numberOfLines={1}>{file.name}</Text>
                                     <Text style={form.pdfHint}>PDF seleccionado</Text>
@@ -486,26 +356,29 @@ function UploadForm({
                                 <Ionicons name="trash-outline" size={14} color={Colors.status.error} />
                                 <Text style={[form.imgBtnText, { color: Colors.status.error }]}>Quitar</Text>
                             </TouchableOpacity>
+                            <TouchableOpacity style={form.imgBtn} onPress={showFileOptions}>
+                                <Ionicons name="swap-horizontal-outline" size={14} color={Colors.primary.main} />
+                                <Text style={form.imgBtnText}>Cambiar</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 ) : (
                     <TouchableOpacity
-                        style={[form.imgPicker, errors.file && form.imgPickerError]}
+                        style={[form.imgPicker, fileError && form.imgPickerError]}
                         onPress={showFileOptions}
                         activeOpacity={0.8}
                     >
-                        <Ionicons name="attach-outline" size={30}
-                            color={errors.file ? Colors.status.error : Colors.screen.iconMuted} />
-                        <Text style={[form.imgPickerText, errors.file && { color: Colors.status.error }]}>
+                        <Ionicons name="attach-outline" size={30} color={fileError ? Colors.status.error : Colors.screen.iconMuted} />
+                        <Text style={[form.imgPickerText, fileError && { color: Colors.status.error }]}>
                             Toca para adjuntar el comprobante
                         </Text>
                         <Text style={form.imgPickerHint}>Imagen (JPG/PNG) o PDF</Text>
                     </TouchableOpacity>
                 )}
-                {errors.file && (
+                {fileError && (
                     <View style={form.errorRow}>
                         <Ionicons name="alert-circle-outline" size={12} color={Colors.status.error} />
-                        <Text style={form.errorText}>{errors.file}</Text>
+                        <Text style={form.errorText}>{fileError}</Text>
                     </View>
                 )}
             </View>
@@ -513,9 +386,7 @@ function UploadForm({
             {uploading || isLoading ? (
                 <View style={form.loadingRow}>
                     <ActivityIndicator size="small" color={Colors.primary.light} />
-                    <Text style={form.loadingText}>
-                        {uploading ? "Subiendo archivo..." : "Guardando..."}
-                    </Text>
+                    <Text style={form.loadingText}>{uploading ? "Subiendo archivo..." : "Guardando..."}</Text>
                 </View>
             ) : (
                 <PrimaryButton label="Enviar comprobante" onPress={handleSubmit} disabled={isLoading || uploading} />
@@ -524,33 +395,48 @@ function UploadForm({
     );
 }
 
-//  Main Screen 
+// ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function RecipesScreen() {
     const { user } = useSession();
-    const { recipes, isLoading, error, fetchMyRecipes, deleteRecipe } = useRecipes();
+    const { recipes, isLoading, error, fetchMyCurrentMonthRecipes, deleteRecipe } = useRecipes();
+    const { fetchQuota } = useMonthlyQuota();
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [showForm, setShowForm] = useState(false);
-    const formHeight = useRef(new Animated.Value(0)).current;
+    const [amountExpected, setAmountExpected] = useState(0);
+    const [loadingQuota, setLoadingQuota] = useState(true);
+    const formAnim = useRef(new Animated.Value(0)).current;
 
     const depId = user?.dep_id;
 
     useEffect(() => {
-        if (depId) fetchMyRecipes(depId);
+        if (depId) {
+            fetchMyCurrentMonthRecipes(depId);
+            // Cargar cuota del mes actual
+            setLoadingQuota(true);
+            fetchQuota(CURRENT_MONTH, CURRENT_YEAR).then(q => {
+                setAmountExpected(q ? Number(q.amount) : 0);
+                setLoadingQuota(false);
+            });
+        }
     }, [depId]);
+
+    const refresh = () => {
+        if (depId) fetchMyCurrentMonthRecipes(depId);
+    };
 
     const toggleForm = () => {
         if (showForm) {
-            Animated.timing(formHeight, { toValue: 0, duration: 250, useNativeDriver: false })
+            Animated.timing(formAnim, { toValue: 0, duration: 220, useNativeDriver: false })
                 .start(() => setShowForm(false));
         } else {
             setShowForm(true);
-            Animated.timing(formHeight, { toValue: 1, duration: 300, useNativeDriver: false }).start();
+            Animated.timing(formAnim, { toValue: 1, duration: 300, useNativeDriver: false }).start();
         }
     };
 
     const handleSuccess = () => {
-        if (depId) fetchMyRecipes(depId);
+        refresh();
         toggleForm();
         Alert.alert("¡Listo!", "Comprobante enviado correctamente. El administrador lo revisará pronto.");
     };
@@ -562,45 +448,24 @@ export default function RecipesScreen() {
                 text: "Eliminar", style: "destructive",
                 onPress: async () => {
                     await deleteRecipe(id);
-                    if (depId) fetchMyRecipes(depId);
+                    refresh();
                 },
             },
         ]);
     };
 
-    // Meses con comprobante aprobado (bloqueo total)
-    const approvedMonths = new Set(
-        recipes.filter(r => r.validated === true).map(r => `${r.month}-${r.year}`)
-    );
-    const existingMonths = new Set(
-        recipes.filter(r => r.validated !== true).map(r => `${r.month}-${r.year}`)
-    );
+    // Estado del mes actual
+    const approvedRecipe = recipes.find(r => r.validated === true);
+    const pendingRecipe = recipes.find(r => r.validated === null || r.validated === undefined);
+    const rejectedRecipes = recipes.filter(r => r.validated === false);
+    const hasApproved = !!approvedRecipe;
+    const totalPaid = recipes.filter(r => r.validated === true).reduce((s, r) => s + r.amount_paid, 0);
+    const isComplete = amountExpected > 0 && totalPaid >= amountExpected;
 
-    const currentMonthKey = (() => {
-        const now = new Date();
-        const names = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-        return `${names[now.getMonth()]}-${now.getFullYear()}`;
-    })();
-    const currentMonthApproved = approvedMonths.has(currentMonthKey);
-
-    const sorted = [...recipes].sort((a, b) => {
-        if (a.year !== b.year) return b.year - a.year;
-        if (a.month !== b.month) return (MONTH_ORDER[b.month] ?? 0) - (MONTH_ORDER[a.month] ?? 0);
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
-
-    // Agrupar pagos por mes para mostrar totales
-    const monthTotals = new Map<string, { paid: number; expected: number; count: number }>();
-    for (const r of recipes) {
-        const key = `${r.month}-${r.year}`;
-        const existing = monthTotals.get(key) ?? { paid: 0, expected: r.amount_expected, count: 0 };
-        monthTotals.set(key, {
-            paid: existing.paid + (r.validated !== false ? r.amount_paid : 0),
-            expected: r.amount_expected,
-            count: existing.count + 1,
-        });
-    }
+    // Puede subir: si no hay aprobado que cubra el monto, o si hay rechazo
+    const canUpload = !hasApproved || (amountExpected > 0 && totalPaid < amountExpected);
+    // No mostrar botón de subir si ya está todo aprobado y cubierto
+    const showUploadBtn = canUpload || rejectedRecipes.length > 0;
 
     return (
         <View style={styles.root}>
@@ -610,40 +475,27 @@ export default function RecipesScreen() {
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
-                        <TouchableOpacity
-                            style={styles.backBtn}
-                            onPress={() => router.push("/(finance)" as any)}
-                            activeOpacity={0.7}
-                        >
+                        <TouchableOpacity style={styles.backBtn} onPress={() => router.push("/(finance)" as any)} activeOpacity={0.7}>
                             <Ionicons name="chevron-back" size={18} color={Colors.screen.textSecondary} />
                         </TouchableOpacity>
                         <View>
                             <Text style={styles.headerTitle}>Mis cuotas</Text>
-                            <Text style={styles.headerSubtitle}>Comprobantes de pago</Text>
+                            <Text style={styles.headerSubtitle}>{CURRENT_MONTH} {CURRENT_YEAR}</Text>
                         </View>
                     </View>
-                    <TouchableOpacity
-                        style={[
-                            styles.uploadBtn,
-                            showForm && styles.uploadBtnActive,
-                            currentMonthApproved && !showForm && styles.uploadBtnDisabled,
-                        ]}
-                        onPress={currentMonthApproved ? undefined : toggleForm}
-                        activeOpacity={currentMonthApproved ? 1 : 0.8}
-                    >
-                        <Ionicons
-                            name={showForm ? "close" : currentMonthApproved ? "checkmark-circle" : "add"}
-                            size={18}
-                            color={showForm ? Colors.status.error : currentMonthApproved ? Colors.status.success : Colors.primary.dark}
-                        />
-                        <Text style={[
-                            styles.uploadBtnText,
-                            showForm && { color: Colors.status.error },
-                            currentMonthApproved && !showForm && { color: Colors.status.success },
-                        ]}>
-                            {showForm ? "Cancelar" : currentMonthApproved ? "Pagado" : "Subir"}
-                        </Text>
-                    </TouchableOpacity>
+                    {showUploadBtn && !isComplete && (
+                        <TouchableOpacity
+                            style={[styles.uploadBtn, showForm && styles.uploadBtnCancel]}
+                            onPress={toggleForm}
+                            activeOpacity={0.8}
+                        >
+                            <Ionicons name={showForm ? "close" : "add"} size={18}
+                                color={showForm ? Colors.status.error : Colors.primary.dark} />
+                            <Text style={[styles.uploadBtnText, showForm && { color: Colors.status.error }]}>
+                                {showForm ? "Cancelar" : "Subir"}
+                            </Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 <ScrollView
@@ -651,62 +503,110 @@ export default function RecipesScreen() {
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {showForm && depId && (
-                        <Animated.View style={{ opacity: formHeight }}>
-                            <UploadForm
-                                depId={depId}
-                                existingMonths={existingMonths}
-                                approvedMonths={approvedMonths}
-                                onSuccess={handleSuccess}
-                            />
-                        </Animated.View>
-                    )}
-
-                    {/* Banner: mes actual cubierto */}
-                    {currentMonthApproved && !showForm && (
-                        <View style={styles.approvedBanner}>
-                            <View style={styles.approvedBannerIcon}>
-                                <Ionicons name="checkmark-circle" size={22} color={Colors.status.success} />
+                    {/* ── Banner: mes cubierto ──────────────────────────────── */}
+                    {isComplete && !showForm && (
+                        <View style={styles.successBanner}>
+                            <View style={styles.successBannerIconWrap}>
+                                <Ionicons name="checkmark-circle" size={24} color={Colors.status.success} />
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.approvedBannerTitle}>Mes actual cubierto</Text>
-                                <Text style={styles.approvedBannerSub}>
-                                    La cuota de este mes ya fue aprobada para tu departamento.
+                                <Text style={styles.successBannerTitle}>¡Cuota cubierta!</Text>
+                                <Text style={styles.successBannerSub}>
+                                    Tu pago de {CURRENT_MONTH} {CURRENT_YEAR} fue aprobado correctamente.
                                 </Text>
                             </View>
                         </View>
                     )}
 
+                    {/* ── Banner: cuota esperada (cuando no hay pagos) ──────── */}
+                    {!loadingQuota && amountExpected > 0 && !isLoading && recipes.length === 0 && (
+                        <View style={styles.quotaBanner}>
+                            <View style={styles.quotaBannerIcon}>
+                                <Ionicons name="cash-outline" size={20} color="#0891B2" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.quotaBannerTitle}>Cuota de {CURRENT_MONTH}</Text>
+                                <Text style={styles.quotaBannerAmount}>{formatCurrency(amountExpected)}</Text>
+                                <Text style={styles.quotaBannerSub}>Monto a pagar este mes</Text>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* ── Progreso del pago (cuando hay cuota configurada y pagos) ── */}
+                    {amountExpected > 0 && totalPaid > 0 && !isComplete && (
+                        <View style={styles.progressCard}>
+                            <View style={styles.progressHeader}>
+                                <Text style={styles.progressLabel}>Progreso de pago</Text>
+                                <Text style={styles.progressPct}>
+                                    {Math.round((totalPaid / amountExpected) * 100)}%
+                                </Text>
+                            </View>
+                            <View style={styles.progressTrack}>
+                                <View style={[styles.progressFill, {
+                                    width: `${Math.min((totalPaid / amountExpected) * 100, 100)}%`,
+                                }]} />
+                            </View>
+                            <Text style={styles.progressNote}>
+                                {formatCurrency(totalPaid)} pagado de {formatCurrency(amountExpected)}
+                            </Text>
+                        </View>
+                    )}
+
+                    {/* ── Formulario ─────────────────────────────────────────── */}
+                    {showForm && depId && (
+                        <Animated.View style={{ opacity: formAnim }}>
+                            <UploadForm
+                                depId={depId}
+                                amountExpected={amountExpected}
+                                onSuccess={handleSuccess}
+                            />
+                        </Animated.View>
+                    )}
+
+                    {/* ── Lista de comprobantes del mes ─────────────────────── */}
                     {isLoading ? (
                         <View style={styles.centered}>
                             <ActivityIndicator size="large" color={Colors.primary.main} />
-                            <Text style={styles.emptyText}>Cargando comprobantes...</Text>
+                            <Text style={styles.stateText}>Cargando...</Text>
                         </View>
                     ) : error ? (
                         <View style={styles.centered}>
-                            <Ionicons name="cloud-offline-outline" size={40} color={Colors.screen.textMuted} />
-                            <Text style={styles.emptyText}>{error}</Text>
+                            <Ionicons name="cloud-offline-outline" size={36} color={Colors.screen.textMuted} />
+                            <Text style={styles.stateText}>{error}</Text>
                         </View>
-                    ) : sorted.length === 0 ? (
+                    ) : recipes.length === 0 && !showForm ? (
                         <View style={styles.emptyCard}>
                             <View style={styles.emptyIcon}>
                                 <Ionicons name="receipt-outline" size={32} color={Colors.screen.textMuted} />
                             </View>
-                            <Text style={styles.emptyTitle}>Sin comprobantes</Text>
-                            <Text style={styles.emptyText}>
-                                No has subido ningún comprobante.{"\n"}Toca "Subir" para agregar uno.
+                            <Text style={styles.emptyTitle}>Sin comprobante este mes</Text>
+                            <Text style={styles.stateText}>
+                                {amountExpected > 0
+                                    ? `Tu cuota de ${CURRENT_MONTH} es ${formatCurrency(amountExpected)}. Toca "Subir" para enviar tu comprobante.`
+                                    : `Toca "Subir" para enviar tu comprobante de ${CURRENT_MONTH}.`}
                             </Text>
                         </View>
-                    ) : (
-                        sorted.map(item => (
-                            <ReceiptCard
-                                key={item.id}
-                                item={item}
-                                onDelete={handleDelete}
-                                onViewImage={setViewingImage}
-                            />
-                        ))
-                    )}
+                    ) : recipes.length > 0 ? (
+                        <>
+                            {recipes.length > 1 && (
+                                <View style={styles.sectionLabel}>
+                                    <Text style={styles.sectionLabelText}>COMPROBANTES DEL MES</Text>
+                                    <View style={styles.sectionLabelLine} />
+                                    <View style={styles.countBadge}>
+                                        <Text style={styles.countBadgeText}>{recipes.length}</Text>
+                                    </View>
+                                </View>
+                            )}
+                            {recipes.map(item => (
+                                <ReceiptCard
+                                    key={item.id}
+                                    item={item}
+                                    onDelete={handleDelete}
+                                    onViewImage={setViewingImage}
+                                />
+                            ))}
+                        </>
+                    ) : null}
                 </ScrollView>
             </SafeAreaView>
 
@@ -717,210 +617,8 @@ export default function RecipesScreen() {
     );
 }
 
-const card = StyleSheet.create({
-    root: {
-        backgroundColor: Colors.screen.card, borderRadius: 16,
-        borderWidth: 1, borderColor: Colors.screen.border,
-        overflow: "hidden", marginBottom: 12,
-        shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
-    },
-    accentBar: { height: 3, width: "100%" },
-    inner: { padding: 14, gap: 10 },
-    header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-    monthBadge: {
-        flexDirection: "row", alignItems: "center", gap: 5,
-        paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1,
-    },
-    monthText: { fontFamily: "Outfit_700Bold", fontSize: 13 },
-    statusBadge: {
-        flexDirection: "row", alignItems: "center", gap: 4,
-        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1,
-    },
-    statusText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
-    amountsRow: {
-        flexDirection: "row", alignItems: "center",
-        backgroundColor: Colors.screen.bg, borderRadius: 10,
-        borderWidth: 1, borderColor: Colors.screen.border, overflow: "hidden",
-    },
-    amountItem: { flex: 1, alignItems: "center", paddingVertical: 10 },
-    amountDivider: { width: 1, height: 36, backgroundColor: Colors.screen.border },
-    amountLabel: {
-        fontFamily: "Outfit_700Bold", fontSize: 9,
-        color: Colors.screen.textMuted, letterSpacing: 1.2, marginBottom: 3,
-    },
-    amountValue: { fontFamily: "Outfit_700Bold", fontSize: 14 },
-    img: { width: "100%", height: 180, borderRadius: 10, marginTop: 4 },
-    imgOverlay: {
-        position: "absolute", bottom: 4, right: 0, left: 0,
-        flexDirection: "row", alignItems: "center", justifyContent: "center",
-        gap: 6, paddingVertical: 8,
-        backgroundColor: "rgba(0,0,0,0.35)",
-        borderBottomLeftRadius: 10, borderBottomRightRadius: 10,
-    },
-    imgOverlayText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: "#fff" },
-    pdfPreview: {
-        flexDirection: "row", alignItems: "center", gap: 12,
-        padding: 14, borderRadius: 10, marginTop: 4,
-        backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
-    },
-    pdfIcon: {
-        width: 48, height: 48, borderRadius: 12,
-        backgroundColor: "#fff", borderWidth: 1, borderColor: "#FECACA",
-        alignItems: "center", justifyContent: "center",
-    },
-    pdfInfo: { flex: 1 },
-    pdfLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.screen.textPrimary },
-    pdfHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
-    noImg: {
-        height: 56, borderRadius: 10, borderWidth: 1.5,
-        borderColor: Colors.screen.border, borderStyle: "dashed",
-        flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    },
-    noImgText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted },
-    deleteBtn: {
-        flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-end",
-        paddingHorizontal: 8, paddingVertical: 4,
-        borderRadius: 8, borderWidth: 1, borderColor: Colors.screen.border,
-    },
-    deleteBtnText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
-});
+// ─── Estilos ──────────────────────────────────────────────────────────────────
 
-const form = StyleSheet.create({
-    root: {
-        backgroundColor: Colors.screen.card, borderRadius: 16,
-        borderWidth: 1, borderColor: Colors.screen.border, padding: 18,
-        marginBottom: 4,
-        shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
-    },
-    header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18 },
-    headerIcon: {
-        width: 40, height: 40, borderRadius: 12,
-        backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
-        alignItems: "center", justifyContent: "center",
-    },
-    headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: Colors.screen.textPrimary },
-    headerSubtitle: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 1 },
-    quotaNote: {
-        flexDirection: "row", alignItems: "flex-start", gap: 8,
-        backgroundColor: "#F0F9FF", borderWidth: 1, borderColor: "#BAE6FD",
-        borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 14,
-    },
-    quotaNoteText: {
-        flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: "#0C4A6E", lineHeight: 17,
-    },
-    field: { marginBottom: 18 },
-    fieldLabel: {
-        fontFamily: "Outfit_700Bold", fontSize: 11,
-        color: Colors.screen.textSecondary, letterSpacing: 1.2,
-        textTransform: "uppercase", marginBottom: 8,
-    },
-    imgPicker: {
-        height: 110, borderRadius: 12, borderWidth: 1.5,
-        borderColor: Colors.screen.border, borderStyle: "dashed",
-        backgroundColor: Colors.screen.bg,
-        alignItems: "center", justifyContent: "center", gap: 6,
-    },
-    imgPickerError: { borderColor: Colors.status.error },
-    imgPickerText: { fontFamily: "Outfit_500Medium", fontSize: 13, color: Colors.screen.textSecondary },
-    imgPickerHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
-    imgPreview: { width: "100%", height: 180, borderRadius: 12, marginBottom: 10 },
-    pdfPreview: {
-        flexDirection: "row", alignItems: "center", gap: 12,
-        padding: 14, borderRadius: 12, marginBottom: 10,
-        backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
-    },
-    pdfName: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.screen.textPrimary },
-    pdfHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
-    imgActions: { flexDirection: "row", gap: 8 },
-    imgBtn: {
-        flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-        paddingVertical: 9, borderRadius: 10,
-        backgroundColor: Colors.screen.chipBlue, borderWidth: 1, borderColor: Colors.screen.border,
-    },
-    imgBtnDanger: { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
-    imgBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.primary.main },
-    loadingRow: {
-        flexDirection: "row", alignItems: "center", justifyContent: "center",
-        gap: 10, paddingVertical: 16,
-    },
-    loadingText: { fontFamily: "Outfit_500Medium", fontSize: 14, color: Colors.primary.main },
-    errorRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
-    errorText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.error },
-});
-
-const mp = StyleSheet.create({
-    container: { marginBottom: 18 },
-    label: {
-        fontFamily: "Outfit_700Bold", fontSize: 11,
-        color: Colors.screen.textSecondary, letterSpacing: 1.2,
-        textTransform: "uppercase", marginBottom: 8,
-    },
-    trigger: {
-        flexDirection: "row", alignItems: "center", height: 52,
-        borderRadius: 12, paddingHorizontal: 14,
-        borderWidth: 1.5, borderColor: Colors.screen.border,
-        backgroundColor: Colors.screen.card,
-    },
-    triggerError: { borderColor: Colors.status.error },
-    triggerText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 15, color: Colors.screen.textPrimary },
-    placeholder: { color: Colors.screen.textMuted },
-    errorRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
-    errorText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.error },
-    overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" },
-    sheet: {
-        backgroundColor: Colors.screen.card,
-        borderTopLeftRadius: 24, borderTopRightRadius: 24,
-        paddingBottom: 32, paddingHorizontal: 20,
-        borderTopWidth: 1, borderTopColor: Colors.screen.border,
-    },
-    handle: {
-        width: 36, height: 4, borderRadius: 2,
-        backgroundColor: Colors.screen.border, alignSelf: "center",
-        marginTop: 12, marginBottom: 16,
-    },
-    sheetTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary, marginBottom: 16 },
-    yearRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
-    yearBtn: {
-        flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center",
-        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
-    },
-    yearBtnActive: { backgroundColor: Colors.primary.main, borderColor: Colors.primary.main },
-    yearBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
-    yearBtnTextActive: { color: "#fff" },
-    monthGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 },
-    monthBtn: {
-        width: "22%", paddingVertical: 12, alignItems: "center", borderRadius: 10,
-        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
-    },
-    monthBtnActive: { backgroundColor: Colors.primary.main, borderColor: Colors.primary.main },
-    monthBtnApproved: {
-        backgroundColor: Colors.status.successBg, borderColor: Colors.status.successBorder, opacity: 0.75,
-    },
-    monthBtnText: { fontFamily: "Outfit_500Medium", fontSize: 13, color: Colors.screen.textSecondary },
-    monthBtnTextActive: { fontFamily: "Outfit_700Bold", color: "#fff" },
-    monthBtnTextApproved: { fontFamily: "Outfit_500Medium", fontSize: 11, color: Colors.status.success },
-    cancelBtn: {
-        paddingVertical: 13, borderRadius: 12, alignItems: "center",
-        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
-    },
-    cancelText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
-});
-
-const viewer = StyleSheet.create({
-    overlay: {
-        flex: 1, backgroundColor: "rgba(0,0,0,0.92)",
-        alignItems: "center", justifyContent: "center",
-    },
-    closeBtn: {
-        position: "absolute", top: 52, right: 20, zIndex: 10,
-        width: 40, height: 40, borderRadius: 20,
-        backgroundColor: "rgba(255,255,255,0.12)",
-        alignItems: "center", justifyContent: "center",
-    },
-    img: { width: "92%", height: "75%" },
-});
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
     header: {
@@ -942,11 +640,62 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
         backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
     },
-    uploadBtnActive: { backgroundColor: Colors.status.errorBg, borderColor: Colors.status.errorBorder },
-    uploadBtnDisabled: { backgroundColor: Colors.status.successBg, borderColor: Colors.status.successBorder },
+    uploadBtnCancel: { backgroundColor: Colors.status.errorBg, borderColor: Colors.status.errorBorder },
     uploadBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.primary.dark },
+
     scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40, gap: 12 },
+
+    successBanner: {
+        flexDirection: "row", alignItems: "center", gap: 14,
+        backgroundColor: Colors.status.successBg,
+        borderWidth: 1, borderColor: Colors.status.successBorder,
+        borderRadius: 16, padding: 16,
+    },
+    successBannerIconWrap: {
+        width: 44, height: 44, borderRadius: 13,
+        backgroundColor: "#fff", borderWidth: 1, borderColor: Colors.status.successBorder,
+        alignItems: "center", justifyContent: "center", flexShrink: 0,
+    },
+    successBannerTitle: { fontFamily: "Outfit_700Bold", fontSize: 14, color: Colors.status.success },
+    successBannerSub: {
+        fontFamily: "Outfit_400Regular", fontSize: 12,
+        color: Colors.status.success, opacity: 0.85, marginTop: 2, lineHeight: 17,
+    },
+
+    quotaBanner: {
+        flexDirection: "row", alignItems: "center", gap: 14,
+        backgroundColor: "#F0F9FF", borderWidth: 1, borderColor: "#BAE6FD",
+        borderRadius: 16, padding: 16, borderTopWidth: 3, borderTopColor: "#0891B2",
+    },
+    quotaBannerIcon: {
+        width: 44, height: 44, borderRadius: 13,
+        backgroundColor: "#fff", borderWidth: 1, borderColor: "#BAE6FD",
+        alignItems: "center", justifyContent: "center", flexShrink: 0,
+    },
+    quotaBannerTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: "#0891B2" },
+    quotaBannerAmount: { fontFamily: "Outfit_900Black", fontSize: 24, color: "#0C4A6E", letterSpacing: -0.5 },
+    quotaBannerSub: { fontFamily: "Outfit_400Regular", fontSize: 11, color: "#0891B2", opacity: 0.8 },
+
+    progressCard: {
+        backgroundColor: Colors.screen.card, borderRadius: 14,
+        borderWidth: 1, borderColor: Colors.screen.border, padding: 14, gap: 8,
+    },
+    progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    progressLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.screen.textPrimary },
+    progressPct: { fontFamily: "Outfit_800ExtraBold", fontSize: 18, color: Colors.status.warning },
+    progressTrack: {
+        height: 8, borderRadius: 4, backgroundColor: Colors.screen.border, overflow: "hidden",
+    },
+    progressFill: {
+        height: "100%", borderRadius: 4, backgroundColor: Colors.status.warning,
+    },
+    progressNote: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
+
     centered: { paddingVertical: 40, alignItems: "center", gap: 12 },
+    stateText: {
+        fontFamily: "Outfit_400Regular", fontSize: 13,
+        color: Colors.screen.textMuted, textAlign: "center", lineHeight: 20,
+    },
     emptyCard: {
         backgroundColor: Colors.screen.card, borderRadius: 16,
         borderWidth: 1, borderColor: Colors.screen.border,
@@ -957,24 +706,179 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.neutral[100], alignItems: "center", justifyContent: "center",
     },
     emptyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 16, color: Colors.screen.textSecondary },
-    emptyText: {
-        fontFamily: "Outfit_400Regular", fontSize: 13,
-        color: Colors.screen.textMuted, textAlign: "center", lineHeight: 20,
+
+    sectionLabel: { flexDirection: "row", alignItems: "center", gap: 10 },
+    sectionLabelText: {
+        fontFamily: "Outfit_700Bold", fontSize: 10,
+        color: Colors.screen.textMuted, letterSpacing: 1.8,
     },
-    approvedBanner: {
+    sectionLabelLine: { flex: 1, height: 1, backgroundColor: Colors.screen.border },
+    countBadge: {
+        width: 20, height: 20, borderRadius: 10,
+        backgroundColor: Colors.primary.muted, alignItems: "center", justifyContent: "center",
+    },
+    countBadgeText: { fontFamily: "Outfit_700Bold", fontSize: 10, color: Colors.primary.dark },
+});
+
+const card = StyleSheet.create({
+    root: {
+        backgroundColor: Colors.screen.card, borderRadius: 16,
+        borderWidth: 1, borderColor: Colors.screen.border, overflow: "hidden",
+        shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+    },
+    accentBar: { height: 3, width: "100%" },
+    inner: { padding: 14, gap: 10 },
+    header: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
+    monthBadge: {
+        flexDirection: "row", alignItems: "center", gap: 5,
+        paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, borderWidth: 1,
+    },
+    monthText: { fontFamily: "Outfit_700Bold", fontSize: 12 },
+    statusBadge: {
+        flexDirection: "row", alignItems: "center", gap: 4,
+        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1,
+    },
+    statusText: { fontFamily: "Outfit_600SemiBold", fontSize: 11 },
+    amountsRow: {
+        flexDirection: "row", alignItems: "center",
+        backgroundColor: Colors.screen.bg, borderRadius: 10,
+        borderWidth: 1, borderColor: Colors.screen.border, overflow: "hidden",
+    },
+    amountItem: { flex: 1, alignItems: "center", paddingVertical: 10 },
+    amountDivider: { width: 1, height: 36, backgroundColor: Colors.screen.border },
+    amountLabel: {
+        fontFamily: "Outfit_700Bold", fontSize: 9,
+        color: Colors.screen.textMuted, letterSpacing: 1.2, marginBottom: 3,
+    },
+    amountValue: { fontFamily: "Outfit_700Bold", fontSize: 14 },
+    img: { width: "100%", height: 180, borderRadius: 10, marginTop: 4 },
+    imgOverlay: {
+        position: "absolute", bottom: 4, right: 0, left: 0,
+        flexDirection: "row", alignItems: "center", justifyContent: "center",
+        gap: 6, paddingVertical: 8, backgroundColor: "rgba(0,0,0,0.35)",
+        borderBottomLeftRadius: 10, borderBottomRightRadius: 10,
+    },
+    imgOverlayText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: "#fff" },
+    pdfPreview: {
         flexDirection: "row", alignItems: "center", gap: 12,
-        backgroundColor: Colors.status.successBg,
-        borderWidth: 1, borderColor: Colors.status.successBorder,
-        borderRadius: 14, padding: 14,
+        padding: 12, borderRadius: 10, marginTop: 4,
+        backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
     },
-    approvedBannerIcon: {
+    pdfIcon: {
+        width: 44, height: 44, borderRadius: 12,
+        backgroundColor: "#fff", borderWidth: 1, borderColor: "#FECACA",
+        alignItems: "center", justifyContent: "center",
+    },
+    pdfLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.screen.textPrimary },
+    pdfHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
+    noImg: {
+        height: 52, borderRadius: 10, borderWidth: 1.5,
+        borderColor: Colors.screen.border, borderStyle: "dashed",
+        flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    },
+    noImgText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted },
+    rejectedNote: {
+        flexDirection: "row", alignItems: "flex-start", gap: 8,
+        backgroundColor: Colors.status.errorBg, borderRadius: 8,
+        borderWidth: 1, borderColor: Colors.status.errorBorder,
+        paddingHorizontal: 10, paddingVertical: 8,
+    },
+    rejectedNoteText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.status.error, lineHeight: 17 },
+    deleteBtn: {
+        flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-end",
+        paddingHorizontal: 8, paddingVertical: 4,
+        borderRadius: 8, borderWidth: 1, borderColor: Colors.screen.border,
+    },
+    deleteBtnText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
+});
+
+const form = StyleSheet.create({
+    root: {
+        backgroundColor: Colors.screen.card, borderRadius: 16,
+        borderWidth: 1, borderColor: Colors.screen.border, padding: 18,
+        borderTopWidth: 3, borderTopColor: Colors.primary.main,
+        shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+    },
+    header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
+    headerIcon: {
         width: 40, height: 40, borderRadius: 12,
-        backgroundColor: "#fff", borderWidth: 1, borderColor: Colors.status.successBorder,
-        alignItems: "center", justifyContent: "center", flexShrink: 0,
+        backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
+        alignItems: "center", justifyContent: "center",
     },
-    approvedBannerTitle: { fontFamily: "Outfit_700Bold", fontSize: 13, color: Colors.status.success },
-    approvedBannerSub: {
-        fontFamily: "Outfit_400Regular", fontSize: 12,
-        color: Colors.status.success, opacity: 0.8, marginTop: 2, lineHeight: 17,
+    headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: Colors.screen.textPrimary },
+    headerSubtitle: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.dark, marginTop: 2 },
+    quotaNote: {
+        flexDirection: "row", alignItems: "center", gap: 8,
+        backgroundColor: "#F0F9FF", borderWidth: 1, borderColor: "#BAE6FD",
+        borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 16,
     },
+    quotaNoteText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: "#0C4A6E" },
+    field: { marginBottom: 16 },
+    fieldLabel: {
+        fontFamily: "Outfit_700Bold", fontSize: 11,
+        color: Colors.screen.textSecondary, letterSpacing: 1.2,
+        textTransform: "uppercase", marginBottom: 8,
+    },
+    amountInput: {
+        flexDirection: "row", alignItems: "center",
+        height: 60, borderRadius: 14,
+        borderWidth: 2, borderColor: Colors.primary.main,
+        backgroundColor: Colors.primary.soft,
+        paddingHorizontal: 16, gap: 6,
+    },
+    amountInputError: { borderColor: Colors.status.error, backgroundColor: Colors.status.errorBg },
+    currencySymbol: { fontFamily: "Outfit_800ExtraBold", fontSize: 22, color: Colors.primary.dark },
+    amountTextInput: {
+        flex: 1, fontFamily: "Outfit_800ExtraBold",
+        fontSize: 28, color: Colors.screen.textPrimary,
+    },
+    mxnLabel: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.screen.textMuted },
+    imgPicker: {
+        height: 110, borderRadius: 12, borderWidth: 1.5,
+        borderColor: Colors.screen.border, borderStyle: "dashed",
+        backgroundColor: Colors.screen.bg,
+        alignItems: "center", justifyContent: "center", gap: 6,
+    },
+    imgPickerError: { borderColor: Colors.status.error },
+    imgPickerText: { fontFamily: "Outfit_500Medium", fontSize: 13, color: Colors.screen.textSecondary },
+    imgPickerHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
+    imgPreview: { width: "100%", height: 180, borderRadius: 12, marginBottom: 10 },
+    pdfPreview: {
+        flexDirection: "row", alignItems: "center", gap: 12,
+        padding: 14, borderRadius: 12, marginBottom: 10,
+        backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
+    },
+    pdfName: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.screen.textPrimary },
+    pdfHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
+    imgActions: { flexDirection: "row", gap: 8 },
+    imgBtn: {
+        flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+        paddingVertical: 9, borderRadius: 10,
+        backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
+    },
+    imgBtnDanger: { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
+    imgBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.primary.main },
+    errorRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
+    errorText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.error },
+    loadingRow: {
+        flexDirection: "row", alignItems: "center", justifyContent: "center",
+        gap: 10, paddingVertical: 16,
+    },
+    loadingText: { fontFamily: "Outfit_500Medium", fontSize: 14, color: Colors.primary.main },
+});
+
+const viewer = StyleSheet.create({
+    overlay: {
+        flex: 1, backgroundColor: "rgba(0,0,0,0.92)",
+        alignItems: "center", justifyContent: "center",
+    },
+    closeBtn: {
+        position: "absolute", top: 52, right: 20, zIndex: 10,
+        width: 40, height: 40, borderRadius: 20,
+        backgroundColor: "rgba(255,255,255,0.12)",
+        alignItems: "center", justifyContent: "center",
+    },
+    img: { width: "92%", height: "75%" },
 });
