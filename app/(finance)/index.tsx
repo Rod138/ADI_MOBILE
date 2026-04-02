@@ -1,9 +1,7 @@
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
-import { useRecipes } from "@/hooks/useRecipes";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect } from "react";
 import {
     ScrollView,
     StatusBar,
@@ -14,7 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// Module Card
+// ── Module Card ───────────────────────────────────────────────────────────────
 
 function ModuleCard({
     icon,
@@ -24,8 +22,6 @@ function ModuleCard({
     accentColor,
     accentBg,
     accentBorder,
-    badge,
-    stats,
     soon = false,
     roleTag,
 }: {
@@ -36,8 +32,6 @@ function ModuleCard({
     accentColor: string;
     accentBg: string;
     accentBorder: string;
-    badge?: string;
-    stats?: { label: string; value: string | number; color?: string }[];
     soon?: boolean;
     roleTag?: string;
 }) {
@@ -57,11 +51,6 @@ function ModuleCard({
                     <View style={styles.moduleTitles}>
                         <View style={styles.moduleTitleRow}>
                             <Text style={[styles.moduleTitle, soon && styles.moduleTitleMuted]}>{title}</Text>
-                            {badge && (
-                                <View style={[styles.moduleBadge, { backgroundColor: accentBg, borderColor: accentBorder }]}>
-                                    <Text style={[styles.moduleBadgeText, { color: accentColor }]}>{badge}</Text>
-                                </View>
-                            )}
                             {soon && (
                                 <View style={styles.soonBadge}>
                                     <Text style={styles.soonBadgeText}>PRONTO</Text>
@@ -82,33 +71,16 @@ function ModuleCard({
                         </View>
                     )}
                 </View>
-
-                {stats && stats.length > 0 && (
-                    <View style={[styles.statsRow, { borderTopColor: Colors.screen.border }]}>
-                        {stats.map((s, i) => (
-                            <View key={i} style={styles.statItem}>
-                                <Text style={[styles.statValue, s.color ? { color: s.color } : {}]}>{s.value}</Text>
-                                <Text style={styles.statLabel}>{s.label}</Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
             </View>
         </TouchableOpacity>
     );
 }
 
-// Pantalla
+// ── Pantalla ──────────────────────────────────────────────────────────────────
 
 export default function FinanceScreen() {
     const { user } = useSession();
-    const { recipes, fetchMyRecipes } = useRecipes();
-
     const canManage = (user?.rol_id ?? 0) >= 2;
-
-    useEffect(() => {
-        if (user) fetchMyRecipes(user.dep_id);
-    }, [user]);
 
     return (
         <View style={styles.root}>
@@ -117,18 +89,16 @@ export default function FinanceScreen() {
 
                 {/* Header */}
                 <View style={styles.header}>
-                    <View style={styles.headerLeft}>
-                        <TouchableOpacity
-                            style={styles.backBtn}
-                            onPress={() => router.push("/(tabs)/home" as any)}
-                            activeOpacity={0.7}
-                        >
-                            <Ionicons name="chevron-back" size={18} color={Colors.screen.textSecondary} />
-                        </TouchableOpacity>
-                        <View>
-                            <Text style={styles.headerTitle}>Gestión Financiera</Text>
-                            <Text style={styles.headerSubtitle}>Contabilidad y pagos</Text>
-                        </View>
+                    <TouchableOpacity
+                        style={styles.backBtn}
+                        onPress={() => router.push("/(tabs)/home" as any)}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons name="chevron-back" size={18} color={Colors.screen.textSecondary} />
+                    </TouchableOpacity>
+                    <View>
+                        <Text style={styles.headerTitle}>Gestión Financiera</Text>
+                        <Text style={styles.headerSubtitle}>Contabilidad y pagos</Text>
                     </View>
                 </View>
 
@@ -136,42 +106,42 @@ export default function FinanceScreen() {
                     contentContainerStyle={styles.scroll}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* DISPONIBLE AHORA */}
+                    {/* ── TODOS LOS USUARIOS ───────────────────────────── */}
                     <View style={styles.sectionLabel}>
                         <Text style={styles.sectionLabelText}>DISPONIBLE AHORA</Text>
                         <View style={styles.sectionLabelLine} />
                     </View>
 
-                    {/* Estado de cuenta — AHORA ACTIVO */}
+                    {/* Estado de cuenta */}
                     <ModuleCard
                         icon="bar-chart-outline"
                         title="Estado de cuenta"
-                        description="Balance general del condominio con historial de movimientos por mes o rango de fechas."
+                        description="Balance general del condominio con ingresos, egresos y saldo disponible."
                         accentColor="#7C3AED"
                         accentBg="#F5F3FF"
                         accentBorder="#DDD6FE"
                         onPress={() => router.push("/(finance)/balance" as any)}
                     />
 
-                    {/* Cuotas — visible para todos */}
+                    {/* Mis cuotas */}
                     <ModuleCard
                         icon="receipt-outline"
                         title="Mis cuotas"
-                        description="Sube y consulta los comprobantes de tu cuota mensual de mantenimiento."
+                        description="Consulta y sube el comprobante de tu cuota de mantenimiento del mes actual."
                         accentColor={Colors.primary.main}
                         accentBg={Colors.primary.soft}
                         accentBorder={Colors.primary.muted}
                         onPress={() => router.push("/(finance)/recipes" as any)}
                     />
 
-                    {/* Gastos */}
+                    {/* Gastos del condominio */}
                     <ModuleCard
                         icon="trending-down-outline"
                         title="Gastos del condominio"
                         description={
                             canManage
                                 ? "Registra y consulta los egresos del condominio con evidencia fotográfica."
-                                : "Consulta los egresos del condominio registrados por la administración."
+                                : "Consulta los egresos registrados por la administración."
                         }
                         accentColor={Colors.secondary.main}
                         accentBg={Colors.secondary.soft}
@@ -180,64 +150,56 @@ export default function FinanceScreen() {
                         onPress={() => router.push("/(finance)/expenses" as any)}
                     />
 
-                    {/* Tablón de cuotas — solo admin/tesorero */}
+                    {/* ── SOLO ADMIN/TESORERO ──────────────────────────── */}
                     {canManage && (
-                        <ModuleCard
-                            icon="people-outline"
-                            title="Cuotas de residentes"
-                            description="Revisa y valida los comprobantes de pago de cuota mensual de todos los residentes."
-                            accentColor={Colors.primary.main}
-                            accentBg={Colors.primary.soft}
-                            accentBorder={Colors.primary.muted}
-                            roleTag="Admin / Tesorero"
-                            onPress={() => router.push("/(finance)/admin-recipes" as any)}
-                        />
+                        <>
+                            <View style={styles.sectionLabel}>
+                                <Text style={styles.sectionLabelText}>ADMINISTRACIÓN</Text>
+                                <View style={styles.sectionLabelLine} />
+                            </View>
+
+                            {/* Tablón de cuotas */}
+                            <ModuleCard
+                                icon="people-outline"
+                                title="Cuotas de residentes"
+                                description="Revisa y valida los comprobantes de pago de cuota mensual de todos los departamentos."
+                                accentColor={Colors.primary.main}
+                                accentBg={Colors.primary.soft}
+                                accentBorder={Colors.primary.muted}
+                                roleTag="Admin / Tesorero"
+                                onPress={() => router.push("/(finance)/admin-recipes" as any)}
+                            />
+
+                            {/* Cuota mensual + Fondo inicial */}
+                            <ModuleCard
+                                icon="calculator-outline"
+                                title="Configuración financiera"
+                                description="Establece el fondo inicial de la torre y define la cuota de mantenimiento por mes."
+                                accentColor="#0891B2"
+                                accentBg="#F0F9FF"
+                                accentBorder="#BAE6FD"
+                                roleTag="Admin / Tesorero"
+                                onPress={() => router.push("/(finance)/admin-quota" as any)}
+                            />
+
+                            {/* Reportes */}
+                            <ModuleCard
+                                icon="trending-up-outline"
+                                title="Reportes financieros"
+                                description="Análisis anual de ingresos, egresos, tasa de cobranza y flujo neto mensual."
+                                accentColor="#059669"
+                                accentBg="#ECFDF5"
+                                accentBorder="#A7F3D0"
+                                roleTag="Admin / Tesorero"
+                                onPress={() => router.push("/(finance)/reports" as any)}
+                            />
+                        </>
                     )}
-
-                    {/* Cuota mensual — solo admin/tesorero */}
-                    {canManage && (
-                        <ModuleCard
-                            icon="calculator-outline"
-                            title="Cuota mensual"
-                            description="Define o actualiza el monto de la cuota de mantenimiento para cada mes."
-                            accentColor="#0891B2"
-                            accentBg="#F0F9FF"
-                            accentBorder="#BAE6FD"
-                            roleTag="Admin / Tesorero"
-                            onPress={() => router.push("/(finance)/admin-quota" as any)}
-                        />
-                    )}
-
-                    {/* EN DESARROLLO */}
-                    <View style={styles.sectionLabel}>
-                        <Text style={styles.sectionLabelText}>EN DESARROLLO</Text>
-                        <View style={styles.sectionLabelLine} />
-                    </View>
-
-                    <ModuleCard
-                        icon="trending-up-outline"
-                        title="Reportes financieros"
-                        description="Reportes de ingresos, egresos y presupuesto por período."
-                        accentColor={Colors.screen.textMuted}
-                        accentBg={Colors.neutral[100]}
-                        accentBorder={Colors.screen.border}
-                        soon
-                    />
-
-                    <ModuleCard
-                        icon="construct-outline"
-                        title="Gastos de incidencias"
-                        description="Seguimiento automático de costos relacionados a incidencias resueltas."
-                        accentColor={Colors.screen.textMuted}
-                        accentBg={Colors.neutral[100]}
-                        accentBorder={Colors.screen.border}
-                        soon
-                    />
 
                     <View style={styles.footerNote}>
                         <Ionicons name="information-circle-outline" size={13} color={Colors.screen.textMuted} />
                         <Text style={styles.footerNoteText}>
-                            Las funcionalidades se habilitarán progresivamente.
+                            Los datos se actualizan en tiempo real desde la base de datos.
                         </Text>
                     </View>
                 </ScrollView>
@@ -246,15 +208,17 @@ export default function FinanceScreen() {
     );
 }
 
+// ─── Estilos ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
+
     header: {
-        flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-        paddingHorizontal: 16, paddingVertical: 14,
+        flexDirection: "row", alignItems: "center",
+        gap: 10, paddingHorizontal: 16, paddingVertical: 14,
         backgroundColor: Colors.screen.card,
         borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
     },
-    headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
     backBtn: {
         width: 36, height: 36, borderRadius: 10,
         backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
@@ -278,9 +242,9 @@ const styles = StyleSheet.create({
         shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
     },
-    moduleCardSoon: { opacity: 0.6 },
+    moduleCardSoon: { opacity: 0.55 },
     moduleAccentBar: { height: 3, width: "100%" },
-    moduleInner: { padding: 16, gap: 14 },
+    moduleInner: { padding: 16 },
     moduleHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
     moduleIcon: {
         width: 44, height: 44, borderRadius: 13, borderWidth: 1.5,
@@ -288,11 +252,12 @@ const styles = StyleSheet.create({
     },
     moduleTitles: { flex: 1, gap: 4 },
     moduleTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
-    moduleTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary },
+    moduleTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: Colors.screen.textPrimary },
     moduleTitleMuted: { color: Colors.screen.textSecondary },
-    moduleDescription: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted, lineHeight: 18 },
-    moduleBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, borderWidth: 1 },
-    moduleBadgeText: { fontFamily: "Outfit_700Bold", fontSize: 9, letterSpacing: 0.5 },
+    moduleDescription: {
+        fontFamily: "Outfit_400Regular", fontSize: 12,
+        color: Colors.screen.textMuted, lineHeight: 18,
+    },
     soonBadge: {
         paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5,
         backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
@@ -304,8 +269,7 @@ const styles = StyleSheet.create({
     roleBadge: {
         flexDirection: "row", alignItems: "center", gap: 3,
         paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5,
-        backgroundColor: Colors.secondary.soft,
-        borderWidth: 1, borderColor: "#FED7AA",
+        backgroundColor: Colors.secondary.soft, borderWidth: 1, borderColor: "#FED7AA",
     },
     roleBadgeText: {
         fontFamily: "Outfit_700Bold", fontSize: 8,
@@ -315,10 +279,6 @@ const styles = StyleSheet.create({
         width: 32, height: 32, borderRadius: 9, borderWidth: 1,
         alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2,
     },
-    statsRow: { flexDirection: "row", borderTopWidth: 1, paddingTop: 12, gap: 0 },
-    statItem: { flex: 1, alignItems: "center", gap: 2 },
-    statValue: { fontFamily: "Outfit_700Bold", fontSize: 18, color: Colors.screen.textPrimary },
-    statLabel: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.screen.textMuted },
 
     footerNote: {
         flexDirection: "row", alignItems: "center", justifyContent: "center",

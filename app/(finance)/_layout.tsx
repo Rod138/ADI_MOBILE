@@ -9,6 +9,7 @@ export default function FinanceLayout() {
             <Stack.Screen name="admin-recipes" />
             <Stack.Screen name="balance" />
             <Stack.Screen name="admin-quota" />
+            <Stack.Screen name="reports" />
         </Stack>
     );
 }
