@@ -1,5 +1,6 @@
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
+import { notifyQuotaRejected, notifyQuotaValidated } from "@/hooks/useNotificationSender";
 import { useRecipes, type Recipe } from "@/hooks/useRecipes";
 import { useTowerFund } from "@/hooks/useTowerFund";
 import supabase from "@/lib/supabase";
@@ -815,6 +816,25 @@ export default function AdminRecipesScreen() {
         setValidatingId(id);
         await validateRecipe(id, validated);
         setValidatingId(null);
+
+        //Buscar la recipe para saber dep_id, month, year, amount
+        const recipe = recipes.find(r => r.id === id);
+        if (recipe) {
+            if (validated === false) {
+                notifyQuotaRejected({
+                    depId: recipe.dep_id,
+                    month: recipe.month,
+                    year: recipe.year,
+                }).catch(() => { });
+            } else if (validated === true) {
+                notifyQuotaValidated({
+                    depId: recipe.dep_id,
+                    month: recipe.month,
+                    year: recipe.year,
+                    amountPaid: recipe.amount_paid,
+                }).catch(() => { });
+            }
+        }
     };
 
     const handleCashPayment = async (depId: number, month: string, year: number, amount: number, amountExpected: number) => {

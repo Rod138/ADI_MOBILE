@@ -3,6 +3,7 @@ import { SectionCard } from "@/components/ui";
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
 import { useCatalogs, useIncidents } from "@/hooks/useIncidents";
+import { notifyNewIncident } from "@/hooks/useNotificationSender";
 import { uploadImage } from "@/lib/cloudinary";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -138,6 +139,13 @@ export default function CreateIncidentScreen() {
             status_id: statuses[0]?.id ?? 1, cost: 0,
         });
         if (ok) {
+            const areaName = areas.find(a => a.id === areaId)?.name;
+            const reporterName = `${user!.name} ${user!.ap}`.trim();
+            notifyNewIncident({
+                reporterName,
+                area: areaName,
+                description: description.trim(),
+            }).catch(() => { });
             setShowSuccess(true);
             setDescription(""); setAreaId(undefined); setTypeId(undefined);
             setImageUri(null); setFieldErrors({});

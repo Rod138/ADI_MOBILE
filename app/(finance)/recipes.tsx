@@ -2,6 +2,7 @@ import PrimaryButton from "@/components/PrimaryButton";
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
 import { useMonthlyQuota } from "@/hooks/useMonthlyQuota";
+import { notifyNewReceipt } from "@/hooks/useNotificationSender";
 import { getCurrentMonthName, getCurrentYear, useRecipes, type Recipe } from "@/hooks/useRecipes";
 import { uploadFile } from "@/lib/cloudinary";
 import supabase from "@/lib/supabase";
@@ -433,6 +434,15 @@ function UploadForm({
         });
 
         if (ok) {
+            const { data: depData } = await supabase
+                .from("departments").select("name").eq("id", depId).single();
+
+            notifyNewReceipt({
+                depName: depData?.name ?? `Depto ${depId}`,
+                month: selectedMonth,
+                year: selectedYear,
+                amountPaid: parsedAmount,
+            }).catch(() => { });
             setAmount(""); setFile(null); setAmountError(undefined); setFileError(undefined);
             onSuccess();
         } else {

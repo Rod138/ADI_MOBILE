@@ -2,6 +2,7 @@ import InputField from "@/components/InputField";
 import PrimaryButton from "@/components/PrimaryButton";
 import { Colors } from "@/constants/colors";
 import { useMonthlyQuota } from "@/hooks/useMonthlyQuota";
+import { notifyQuotaPublished } from "@/hooks/useNotificationSender";
 import { MONTHS, MONTH_ORDER } from "@/hooks/useRecipes";
 import { useTowerFund } from "@/hooks/useTowerFund";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,7 +20,6 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -467,6 +467,13 @@ export default function AdminQuotaScreen() {
                             : await createQuota(selectedMonth, selectedYear, n);
                         setSaving(false);
                         if (ok) {
+                            if (!existingQuota) {
+                                notifyQuotaPublished({
+                                    month: selectedMonth,
+                                    year: selectedYear,
+                                    amount: n,
+                                }).catch(() => { });
+                            }
                             Alert.alert("¡Listo!", `Cuota de ${selectedMonth} ${selectedYear} ${existingQuota ? "actualizada" : "registrada"}.`);
                             fetchAllQuotas();
                         } else {

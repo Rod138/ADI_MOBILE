@@ -2,6 +2,7 @@ import PrimaryButton from "@/components/PrimaryButton";
 import { BackButton, SectionCard } from "@/components/ui";
 import { Colors } from "@/constants/colors";
 import { useIncidents, type Incident } from "@/hooks/useIncidents";
+import { notifyIncidentStatusChange } from "@/hooks/useNotificationSender";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -360,6 +361,12 @@ export default function AdminIncidentScreen() {
         })();
 
         if (ok) {
+            notifyIncidentStatusChange({
+                reporterUserId: incident.usr_id,
+                newStatus: selectedStatusName,
+                area: incident.areas?.name,
+            }).catch(() => { });
+
             setShowSuccess(true);
             Animated.parallel([
                 Animated.spring(successScale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 10 }),

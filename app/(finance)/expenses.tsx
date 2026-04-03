@@ -3,6 +3,7 @@ import PrimaryButton from "@/components/PrimaryButton";
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
 import { useExpenses, type Expense } from "@/hooks/useExpenses";
+import { notifyNewExpense } from "@/hooks/useNotificationSender";
 import { uploadFile } from "@/lib/cloudinary";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -239,6 +240,10 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
         });
 
         if (ok) {
+            notifyNewExpense({
+                description: description.trim(),
+                amount: parseFloat(amount.replace(/,/g, "")),
+            }).catch(() => { });
             setDescription("");
             setAmount("");
             setImageUri(null);
