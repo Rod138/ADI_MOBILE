@@ -1,12 +1,12 @@
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
 import supabase from "@/lib/supabase";
-import { generateReportHTML } from "@/utils/generateReportHTML";
+import { generateMonthlyReportHTML } from "@/utils/generateReportHTML";
 import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import { router } from "expo-router";
-import * as Sharing from 'expo-sharing';
-import { useEffect, useMemo, useState } from "react";
+import * as Sharing from "expo-sharing";
+import { useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Modal,
@@ -15,7 +15,7 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -25,23 +25,35 @@ const MONTH_NAMES = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
-
 const NOW = new Date();
 const CURRENT_YEAR = NOW.getFullYear();
 const CURRENT_MONTH = NOW.getMonth(); // 0-indexed
 
-// Generate year range (5 years back, 1 ahead)
-const YEARS = Array.from({ length: 7 }, (_, i) => CURRENT_YEAR - 5 + i);
-
-type ReportMode = "monthly" | "annual";
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface DateRange {
-    fromYear: number;
-    fromMonth: number; // 0-indexed
-    toYear: number;
-    toMonth: number;   // 0-indexed
+interface AvailableMonth {
+    monthIndex: number;
+    monthName: string;
+    year: number;
+    key: string;
+}
+
+interface Department { id: number; name: string; }
+
+interface DeptPaymentRow {
+    depId: number;
+    depName: string;
+    amountExpected: number;
+    amountPaid: number;
+    paid: boolean;
+    isPartial: boolean;
+    paidAt: string | null;
+}
+
+interface ExpenseRow {
+    date: string;
+    description: string;
+    amount: number;
 }
 
 interface MonthlyReport {
@@ -54,22 +66,9 @@ interface MonthlyReport {
     expectedIncome: number;
     deficit: number;
     netFlow: number;
-    paymentCount: number;
     paidDepts: number;
+    partialDepts: number;
     totalDepts: number;
-}
-
-interface AnnualSummary {
-    totalIncome: number;
-    totalExpenses: number;
-    totalIncidentCosts: number;
-    totalExpected: number;
-    totalDeficit: number;
-    netFlow: number;
-    collectionRate: number;
-    bestMonth: string;
-    worstMonth: string;
-    avgMonthlyExpense: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -77,52 +76,57 @@ interface AnnualSummary {
 function fmt(n: number) {
     return `$${Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
-
 function fmtShort(n: number): string {
-    if (Math.abs(n) >= 1000000) return `$${(n / 1000000).toFixed(1)}M`;
-    if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(1)}k`;
+    if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+    if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
     return fmt(n);
 }
-
 function pct(value: number, total: number): number {
     if (total === 0) return 0;
     return Math.min(Math.round((value / total) * 100), 100);
 }
-
-/** Returns an array of { year, monthIndex } pairs within the range (inclusive) */
-function getMonthsInRange(range: DateRange): { year: number; monthIndex: number }[] {
-    const result: { year: number; monthIndex: number }[] = [];
-    let y = range.fromYear;
-    let m = range.fromMonth;
-    while (y < range.toYear || (y === range.toYear && m <= range.toMonth)) {
-        result.push({ year: y, monthIndex: m });
-        m++;
-        if (m > 11) { m = 0; y++; }
-    }
-    return result;
+function fmtDate(iso: string): string {
+    return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-function rangeLabel(range: DateRange, mode: ReportMode): string {
-    if (mode === "annual") {
-        if (range.fromYear === range.toYear) return `${range.fromYear}`;
-        return `${range.fromYear} – ${range.toYear}`;
+/**
+ * Genera meses disponibles desde startDate hasta el mes actual (desc).
+ * Si startDate es null solo devuelve el mes actual.
+ */
+function buildAvailableMonths(startDate: string | null): AvailableMonth[] {
+    const result: AvailableMonth[] = [];
+    let startYear = CURRENT_YEAR;
+    let startMonthIdx = CURRENT_MONTH;
+
+    if (startDate) {
+        const d = new Date(startDate);
+        startYear = d.getFullYear();
+        startMonthIdx = d.getMonth();
     }
-    const from = `${MONTH_NAMES[range.fromMonth].slice(0, 3)} ${range.fromYear}`;
-    const to = `${MONTH_NAMES[range.toMonth].slice(0, 3)} ${range.toYear}`;
-    if (from === to) return from;
-    return `${from} – ${to}`;
+
+    let y = CURRENT_YEAR;
+    let m = CURRENT_MONTH;
+
+    while (y > startYear || (y === startYear && m >= startMonthIdx)) {
+        result.push({
+            monthIndex: m,
+            monthName: MONTH_NAMES[m],
+            year: y,
+            key: `${MONTH_NAMES[m]}-${y}`,
+        });
+        m--;
+        if (m < 0) { m = 11; y--; }
+        if (result.length >= 60) break;
+    }
+
+    return result;
 }
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
 function KpiCard({ icon, label, value, sub, color, bg, border }: {
-    icon: keyof typeof Ionicons.glyphMap;
-    label: string;
-    value: string;
-    sub?: string;
-    color: string;
-    bg: string;
-    border: string;
+    icon: keyof typeof Ionicons.glyphMap; label: string; value: string; sub?: string;
+    color: string; bg: string; border: string;
 }) {
     return (
         <View style={[kpi.root, { backgroundColor: bg, borderColor: border }]}>
@@ -147,200 +151,87 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
     );
 }
 
-// ─── Month Row ────────────────────────────────────────────────────────────────
+// ─── Month Picker ─────────────────────────────────────────────────────────────
 
-function MonthRow({ report, isEven }: { report: MonthlyReport; isEven: boolean }) {
-    const coverage = pct(report.income, report.expectedIncome);
-    const isPositive = report.netFlow >= 0;
-
-    return (
-        <View style={[mrow.root, isEven && mrow.even]}>
-            <View style={mrow.monthCol}>
-                <Text style={mrow.monthName}>{report.month.slice(0, 3)}</Text>
-                <Text style={mrow.monthYear}>{report.year}</Text>
-                {report.expectedIncome > 0 && (
-                    <View style={[mrow.coveragePill, {
-                        backgroundColor: coverage >= 100 ? Colors.status.successBg : Colors.status.warningBg,
-                    }]}>
-                        <Text style={[mrow.coverageText, {
-                            color: coverage >= 100 ? Colors.status.success : Colors.status.warning,
-                        }]}>
-                            {coverage}%
-                        </Text>
-                    </View>
-                )}
-            </View>
-            <View style={mrow.incomCol}>
-                <Text style={[mrow.amount, { color: Colors.status.success }]}>
-                    {fmtShort(report.income)}
-                </Text>
-                <Text style={mrow.sub}>{report.paidDepts}/{report.totalDepts}</Text>
-            </View>
-            <View style={mrow.expCol}>
-                <Text style={[mrow.amount, { color: Colors.status.error }]}>
-                    {fmtShort(report.expenses + report.incidentCosts)}
-                </Text>
-                {report.incidentCosts > 0 && (
-                    <Text style={mrow.sub}>+{fmtShort(report.incidentCosts)} inc.</Text>
-                )}
-            </View>
-            <View style={mrow.netCol}>
-                <Text style={[mrow.amount, { color: isPositive ? Colors.primary.dark : Colors.status.error }]}>
-                    {isPositive ? "+" : ""}{fmtShort(report.netFlow)}
-                </Text>
-            </View>
-        </View>
-    );
-}
-
-// ─── Date Range Picker Modal ──────────────────────────────────────────────────
-
-function DateRangePicker({
-    visible,
-    mode,
-    range,
-    onApply,
-    onClose,
+function MonthYearPicker({
+    visible, availableMonths, selectedKey, onApply, onClose,
 }: {
-    visible: boolean;
-    mode: ReportMode;
-    range: DateRange;
-    onApply: (r: DateRange) => void;
-    onClose: () => void;
+    visible: boolean; availableMonths: AvailableMonth[];
+    selectedKey: string; onApply: (m: AvailableMonth) => void; onClose: () => void;
 }) {
-    const [draft, setDraft] = useState<DateRange>(range);
-    const [selecting, setSelecting] = useState<"from" | "to">("from");
+    const [draftKey, setDraftKey] = useState(selectedKey);
 
-    useEffect(() => {
-        if (visible) {
-            setDraft(range);
-            setSelecting("from");
-        }
-    }, [visible]);
-
-    const setField = (field: "fromYear" | "fromMonth" | "toYear" | "toMonth", val: number) => {
-        setDraft(prev => {
-            let next = { ...prev, [field]: val };
-            // Ensure from <= to
-            const fromTs = next.fromYear * 12 + next.fromMonth;
-            const toTs = next.toYear * 12 + next.toMonth;
-            if (fromTs > toTs) {
-                if (field.startsWith("from")) {
-                    next = { ...next, toYear: next.fromYear, toMonth: next.fromMonth };
-                } else {
-                    next = { ...next, fromYear: next.toYear, fromMonth: next.toMonth };
-                }
-            }
-            return next;
-        });
-    };
+    useEffect(() => { if (visible) setDraftKey(selectedKey); }, [visible]);
 
     const handleApply = () => {
-        onApply(draft);
-        onClose();
+        const found = availableMonths.find(m => m.key === draftKey);
+        if (found) { onApply(found); onClose(); }
     };
 
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-            <View style={drp.overlay}>
-                <View style={drp.sheet}>
-                    {/* Header */}
-                    <View style={drp.sheetHeader}>
+            <View style={picker.overlay}>
+                <View style={picker.sheet}>
+                    <View style={picker.handle} />
+                    <View style={picker.sheetHeader}>
                         <View>
-                            <Text style={drp.sheetTitle}>Rango de fechas</Text>
-                            <Text style={drp.sheetSub}>
-                                {mode === "annual" ? "Selecciona años" : "Selecciona meses"}
-                            </Text>
+                            <Text style={picker.sheetTitle}>Seleccionar período</Text>
+                            <Text style={picker.sheetSub}>Meses disponibles desde el inicio del fondo</Text>
                         </View>
-                        <TouchableOpacity style={drp.closeBtn} onPress={onClose} activeOpacity={0.7}>
+                        <TouchableOpacity style={picker.closeBtn} onPress={onClose} activeOpacity={0.7}>
                             <Ionicons name="close" size={18} color={Colors.screen.textSecondary} />
                         </TouchableOpacity>
                     </View>
 
-                    {/* Tabs: Desde / Hasta */}
-                    <View style={drp.tabs}>
-                        {(["from", "to"] as const).map(tab => (
-                            <TouchableOpacity
-                                key={tab}
-                                style={[drp.tab, selecting === tab && drp.tabActive]}
-                                onPress={() => setSelecting(tab)}
-                                activeOpacity={0.8}
-                            >
-                                <Ionicons
-                                    name={tab === "from" ? "play-forward-outline" : "flag-outline"}
-                                    size={13}
-                                    color={selecting === tab ? Colors.primary.dark : Colors.screen.textMuted}
-                                />
-                                <Text style={[drp.tabText, selecting === tab && drp.tabTextActive]}>
-                                    {tab === "from" ? "Desde" : "Hasta"}
-                                </Text>
-                                <Text style={[drp.tabDate, selecting === tab && drp.tabDateActive]}>
-                                    {mode === "annual"
-                                        ? (tab === "from" ? draft.fromYear : draft.toYear)
-                                        : `${MONTH_NAMES[tab === "from" ? draft.fromMonth : draft.toMonth].slice(0, 3)} ${tab === "from" ? draft.fromYear : draft.toYear}`
-                                    }
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 320 }}>
-                        {/* Month picker (only for monthly mode) */}
-                        {mode === "monthly" && (
-                            <>
-                                <Text style={drp.pickerLabel}>Mes</Text>
-                                <View style={drp.monthGrid}>
-                                    {MONTH_NAMES.map((name, idx) => {
-                                        const current = selecting === "from" ? draft.fromMonth : draft.toMonth;
-                                        const isSelected = current === idx;
-                                        return (
-                                            <TouchableOpacity
-                                                key={name}
-                                                style={[drp.monthChip, isSelected && drp.monthChipActive]}
-                                                onPress={() => setField(selecting === "from" ? "fromMonth" : "toMonth", idx)}
-                                                activeOpacity={0.75}
-                                            >
-                                                <Text style={[drp.monthChipText, isSelected && drp.monthChipTextActive]}>
-                                                    {name.slice(0, 3)}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </View>
-                            </>
-                        )}
-
-                        {/* Year picker */}
-                        <Text style={drp.pickerLabel}>Año</Text>
-                        <View style={drp.yearList}>
-                            {YEARS.map(y => {
-                                const current = selecting === "from" ? draft.fromYear : draft.toYear;
-                                const isSelected = current === y;
-                                return (
-                                    <TouchableOpacity
-                                        key={y}
-                                        style={[drp.yearItem, isSelected && drp.yearItemActive]}
-                                        onPress={() => setField(selecting === "from" ? "fromYear" : "toYear", y)}
-                                        activeOpacity={0.8}
-                                    >
-                                        <Text style={[drp.yearItemText, isSelected && drp.yearItemTextActive]}>{y}</Text>
-                                        {isSelected && (
-                                            <Ionicons name="checkmark-circle" size={18} color={Colors.primary.main} />
-                                        )}
-                                    </TouchableOpacity>
-                                );
-                            })}
+                    {availableMonths.length === 0 ? (
+                        <View style={picker.emptyNote}>
+                            <Ionicons name="warning-outline" size={18} color={Colors.status.warning} />
+                            <Text style={picker.emptyNoteText}>
+                                No hay períodos disponibles. Configura el fondo inicial en "Configuración financiera".
+                            </Text>
                         </View>
-                    </ScrollView>
+                    ) : (
+                        <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+                            <View style={picker.monthList}>
+                                {availableMonths.map(m => {
+                                    const isSelected = m.key === draftKey;
+                                    return (
+                                        <TouchableOpacity
+                                            key={m.key}
+                                            style={[picker.monthItem, isSelected && picker.monthItemActive]}
+                                            onPress={() => setDraftKey(m.key)}
+                                            activeOpacity={0.75}
+                                        >
+                                            <View>
+                                                <Text style={[picker.monthItemName, isSelected && picker.monthItemNameActive]}>
+                                                    {m.monthName}
+                                                </Text>
+                                                <Text style={[picker.monthItemYear, isSelected && { color: Colors.primary.main }]}>
+                                                    {m.year}
+                                                </Text>
+                                            </View>
+                                            {isSelected && (
+                                                <Ionicons name="checkmark-circle" size={20} color={Colors.primary.main} />
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </ScrollView>
+                    )}
 
-                    {/* Acciones */}
-                    <View style={drp.actions}>
-                        <TouchableOpacity style={drp.cancelBtn} onPress={onClose} activeOpacity={0.8}>
-                            <Text style={drp.cancelText}>Cancelar</Text>
+                    <View style={picker.actions}>
+                        <TouchableOpacity style={picker.cancelBtn} onPress={onClose} activeOpacity={0.8}>
+                            <Text style={picker.cancelText}>Cancelar</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={drp.applyBtn} onPress={handleApply} activeOpacity={0.8}>
+                        <TouchableOpacity
+                            style={[picker.applyBtn, availableMonths.length === 0 && { opacity: 0.5 }]}
+                            onPress={handleApply}
+                            disabled={availableMonths.length === 0}
+                            activeOpacity={0.8}
+                        >
                             <Ionicons name="checkmark" size={16} color="#fff" />
-                            <Text style={drp.applyText}>Aplicar</Text>
+                            <Text style={picker.applyText}>Aplicar</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -354,178 +245,189 @@ function DateRangePicker({
 export default function ReportsScreen() {
     const { user } = useSession();
 
-    const [mode, setMode] = useState<ReportMode>("annual");
-    const [range, setRange] = useState<DateRange>({
-        fromYear: CURRENT_YEAR,
-        fromMonth: 0,
-        toYear: CURRENT_YEAR,
-        toMonth: CURRENT_MONTH,
-    });
+    const [availableMonths, setAvailableMonths] = useState<AvailableMonth[]>([]);
+    const [fundLoading, setFundLoading] = useState(true);
+    const [selectedMonth, setSelectedMonth] = useState<AvailableMonth | null>(null);
     const [showPicker, setShowPicker] = useState(false);
 
-    const [reports, setReports] = useState<MonthlyReport[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [report, setReport] = useState<MonthlyReport | null>(null);
+    const [deptRows, setDeptRows] = useState<DeptPaymentRow[]>([]);
+    const [expenseRows, setExpenseRows] = useState<ExpenseRow[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [activeDepts, setActiveDepts] = useState(0);
     const [sharing, setSharing] = useState(false);
 
+    // ── Cargar fondo → construir lista de meses ───────────────────────────────
     useEffect(() => {
-        loadData();
-    }, [range, mode]);
+        const loadFund = async () => {
+            setFundLoading(true);
+            try {
+                const { data } = await supabase
+                    .from("tower_fund")
+                    .select("updated_at")
+                    .order("id", { ascending: true })
+                    .limit(1)
+                    .maybeSingle();
 
-    const loadData = async () => {
+                const months = buildAvailableMonths(data?.updated_at ?? null);
+                setAvailableMonths(months);
+                if (months.length > 0) setSelectedMonth(months[0]);
+            } catch {
+                setAvailableMonths([]);
+            } finally {
+                setFundLoading(false);
+            }
+        };
+        loadFund();
+    }, []);
+
+    useEffect(() => {
+        if (selectedMonth) loadData(selectedMonth);
+    }, [selectedMonth]);
+
+    // ── loadData ──────────────────────────────────────────────────────────────
+    const loadData = async (period: AvailableMonth) => {
         setIsLoading(true);
         setError(null);
         try {
-            // Compute effective range
-            const effectiveRange: DateRange = mode === "annual"
-                ? { fromYear: range.fromYear, fromMonth: 0, toYear: range.toYear, toMonth: 11 }
-                : range;
+            const { monthName, monthIndex, year } = period;
+            const monthStart = new Date(year, monthIndex, 1).toISOString();
+            const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999).toISOString();
 
-            const rangeStart = new Date(effectiveRange.fromYear, effectiveRange.fromMonth, 1);
-            const rangeEnd = new Date(effectiveRange.toYear, effectiveRange.toMonth + 1, 0, 23, 59, 59, 999);
-            const startISO = rangeStart.toISOString();
-            const endISO = rangeEnd.toISOString();
+            const [deptsRes, quotaPayRes, expensesRes, incidentsRes, quotaCfgRes] = await Promise.all([
+                supabase.from("departments").select("id, name").eq("is_in_use", true).order("name"),
+                supabase.from("recipes_payment").select("dep_id, amount_paid, amount_expected, created_at")
+                    .eq("month", monthName).eq("year", year).eq("validated", true),
+                supabase.from("tower_expenses").select("amount, expense_date, description")
+                    .gte("expense_date", monthStart).lte("expense_date", monthEnd).order("expense_date"),
+                supabase.from("incidents").select("cost, completed_at")
+                    .gte("completed_at", monthStart).lte("completed_at", monthEnd).not("cost", "is", null),
+                supabase.from("monthly_quota").select("amount").eq("year", year).eq("month", monthName).maybeSingle(),
+            ]);
 
-            // Get all years in range for quota queries
-            const yearsInRange: number[] = [];
-            for (let y = effectiveRange.fromYear; y <= effectiveRange.toYear; y++) yearsInRange.push(y);
+            const depts = (deptsRes.data ?? []) as Department[];
+            const deptCount = depts.length;
+            const quotaPayments = quotaPayRes.data ?? [];
+            const expensesData = expensesRes.data ?? [];
+            const incidentsData = incidentsRes.data ?? [];
+            const quotaPerDept = quotaCfgRes.data ? Number(quotaCfgRes.data.amount) : 0;
 
-            // Deptos activos
-            const { count: deptCount } = await supabase
-                .from("departments")
-                .select("id", { count: "exact", head: true })
-                .eq("is_in_use", true);
-            const depts = deptCount ?? 0;
-            setActiveDepts(depts);
+            const income = quotaPayments.reduce((s, p) => s + Number(p.amount_paid), 0);
+            const expenses = expensesData.reduce((s, e) => s + Number(e.amount), 0);
+            const incidentCosts = incidentsData.reduce((s, i) => s + Number(i.cost ?? 0), 0);
+            const expectedIncome = quotaPerDept * deptCount;
+            const deficit = expectedIncome > 0 ? Math.max(expectedIncome - income, 0) : 0;
+            const netFlow = income - expenses - incidentCosts;
 
-            // Cuotas validadas del rango
-            const { data: quotaPayments } = await supabase
-                .from("recipes_payment")
-                .select("month, year, amount_paid, dep_id")
-                .eq("validated", true)
-                .in("year", yearsInRange);
+            // Mapa de pagos agrupados por depto
+            const paymentsMap = new Map<number, { totalPaid: number; expected: number; createdAt: string }>();
+            quotaPayments.forEach(p => {
+                const ex = paymentsMap.get(p.dep_id);
+                if (ex) {
+                    ex.totalPaid += Number(p.amount_paid);
+                    if (p.created_at > ex.createdAt) ex.createdAt = p.created_at;
+                } else {
+                    paymentsMap.set(p.dep_id, {
+                        totalPaid: Number(p.amount_paid),
+                        expected: Number(p.amount_expected),
+                        createdAt: p.created_at,
+                    });
+                }
+            });
 
-            // Gastos del rango
-            const { data: expensesData } = await supabase
-                .from("tower_expenses")
-                .select("amount, expense_date")
-                .gte("expense_date", startISO)
-                .lte("expense_date", endISO);
-
-            // Incidencias resueltas del rango
-            const { data: incidentsData } = await supabase
-                .from("incidents")
-                .select("cost, completed_at")
-                .gte("completed_at", startISO)
-                .lte("completed_at", endISO)
-                .not("cost", "is", null);
-
-            // Cuotas configuradas
-            const { data: quotaConfig } = await supabase
-                .from("monthly_quota")
-                .select("month, year, amount")
-                .in("year", yearsInRange);
-
-            // Build month-by-month report for all months in range
-            const monthsInRange = getMonthsInRange(effectiveRange);
-
-            const monthReports: MonthlyReport[] = monthsInRange.map(({ year, monthIndex }) => {
-                const month = MONTH_NAMES[monthIndex];
-
-                const monthPayments = (quotaPayments ?? []).filter(
-                    p => p.month === month && p.year === year
-                );
-                const income = monthPayments.reduce((s, p) => s + Number(p.amount_paid), 0);
-                const paidDepts = new Set(monthPayments.map(p => p.dep_id)).size;
-
-                const monthExpenses = (expensesData ?? []).filter(e => {
-                    const d = new Date(e.expense_date);
-                    return d.getMonth() === monthIndex && d.getFullYear() === year;
-                });
-                const expenses = monthExpenses.reduce((s, e) => s + Number(e.amount), 0);
-
-                const monthIncidents = (incidentsData ?? []).filter(i => {
-                    const d = new Date(i.completed_at);
-                    return d.getMonth() === monthIndex && d.getFullYear() === year;
-                });
-                const incidentCosts = monthIncidents.reduce((s, i) => s + Number(i.cost ?? 0), 0);
-
-                const quotaCfg = (quotaConfig ?? []).find(q => q.month === month && q.year === year);
-                const expectedIncome = quotaCfg ? Number(quotaCfg.amount) * depts : 0;
-                const deficit = expectedIncome > 0 ? Math.max(expectedIncome - income, 0) : 0;
-                const netFlow = income - expenses - incidentCosts;
-
+            // Filas por departamento
+            const rows: DeptPaymentRow[] = depts.map(dept => {
+                const payment = paymentsMap.get(dept.id);
+                const amountExpected = payment?.expected ?? quotaPerDept;
+                const amountPaid = payment?.totalPaid ?? 0;
+                const paid = !!payment && amountPaid > 0;
+                const isPartial = paid && amountExpected > 0 && amountPaid < amountExpected;
                 return {
-                    month, monthIndex, year, income, expenses, incidentCosts,
-                    expectedIncome, deficit, netFlow,
-                    paymentCount: monthPayments.length,
-                    paidDepts, totalDepts: depts,
+                    depId: dept.id, depName: dept.name,
+                    amountExpected, amountPaid, paid, isPartial,
+                    paidAt: payment?.createdAt ?? null,
                 };
             });
 
-            setReports(monthReports);
+            // Orden: completos → parciales → pendientes → por nombre
+            rows.sort((a, b) => {
+                const score = (r: DeptPaymentRow) => r.paid && !r.isPartial ? 0 : r.isPartial ? 1 : 2;
+                return score(a) - score(b) || a.depName.localeCompare(b.depName);
+            });
+            setDeptRows(rows);
+
+            const paidDepts = rows.filter(r => r.paid && !r.isPartial).length;
+            const partialDepts = rows.filter(r => r.isPartial).length;
+
+            setReport({
+                month: monthName, monthIndex, year,
+                income, expenses, incidentCosts, expectedIncome, deficit, netFlow,
+                paidDepts, partialDepts, totalDepts: deptCount,
+            });
+
+            // Lista de egresos individuales
+            const expList: ExpenseRow[] = [
+                ...expensesData.map(e => ({
+                    date: fmtDate(e.expense_date),
+                    description: e.description ?? "Sin descripción",
+                    amount: Number(e.amount),
+                })),
+                ...incidentsData.map(i => ({
+                    date: fmtDate(i.completed_at),
+                    description: "Incidencia resuelta",
+                    amount: Number(i.cost ?? 0),
+                })),
+            ];
+            expList.sort((a, b) => a.date.localeCompare(b.date));
+            setExpenseRows(expList);
+
         } catch (e: any) {
-            setError(e?.message ?? "Error al cargar los reportes.");
+            setError(e?.message ?? "Error al cargar el reporte.");
         } finally {
             setIsLoading(false);
         }
     };
 
-    // ── Resumen del período ───────────────────────────────────────────────────
-    const annual: AnnualSummary = useMemo(() => {
-        const monthsWithData = reports.filter(r => r.income > 0 || r.expenses > 0);
-        const totalIncome = reports.reduce((s, r) => s + r.income, 0);
-        const totalExpenses = reports.reduce((s, r) => s + r.expenses, 0);
-        const totalIncidentCosts = reports.reduce((s, r) => s + r.incidentCosts, 0);
-        const totalExpected = reports.reduce((s, r) => s + r.expectedIncome, 0);
-        const totalDeficit = reports.reduce((s, r) => s + r.deficit, 0);
-        const netFlow = totalIncome - totalExpenses - totalIncidentCosts;
-        const collectionRate = pct(totalIncome, totalExpected);
+    const collectionRate = report ? pct(report.income, report.expectedIncome) : 0;
+    const periodLabel = selectedMonth ? `${selectedMonth.monthName} ${selectedMonth.year}` : "—";
 
-        const sortedByIncome = [...monthsWithData].sort((a, b) => b.income - a.income);
-        const bestMonth = sortedByIncome[0]?.month ?? "—";
-        const worstMonth = sortedByIncome[sortedByIncome.length - 1]?.month ?? "—";
-
-        const avgMonthlyExpense = monthsWithData.length > 0
-            ? (totalExpenses + totalIncidentCosts) / monthsWithData.length
-            : 0;
-
-        return {
-            totalIncome, totalExpenses, totalIncidentCosts, totalExpected,
-            totalDeficit, netFlow, collectionRate, bestMonth, worstMonth, avgMonthlyExpense,
-        };
-    }, [reports]);
-
-    const activeMonths = useMemo(
-        () => reports.filter(r => r.income > 0 || r.expenses > 0 || r.incidentCosts > 0),
-        [reports]
-    );
-
-    // ── Share ─────────────────────────────────────────────────────────────────
-
+    // ── Exportar PDF ──────────────────────────────────────────────────────────
     const handleShare = async () => {
+        if (!report) return;
         setSharing(true);
         try {
-            const label = rangeLabel(range, mode);
-
-            const html = generateReportHTML({
-                label,
-                annual,
-                activeMonths,
-                activeDepts,
+            const html = generateMonthlyReportHTML({
+                month: report.month,
+                year: report.year,
                 condominioName: "Residencial del Parque",
                 towerName: "Torre M",
-                // logoBase64: "data:image/png;base64,..." // ← cuando tengas el logo
+                totalIncome: report.income,
+                totalExpenses: report.expenses,
+                totalIncidentCosts: report.incidentCosts,
+                totalExpected: report.expectedIncome,
+                activeDepts: report.totalDepts,
+                departments: deptRows.map(d => ({
+                    depId: d.depId,
+                    depName: d.depName,
+                    amountPaid: d.amountPaid,
+                    amountExpected: d.amountExpected,
+                    paid: d.paid,
+                    isPartial: d.isPartial,
+                    paidAt: d.paidAt,
+                })),
+                expenses: expenseRows.map(e => ({
+                    date: e.date,
+                    concept: e.description,
+                    amount: e.amount,
+                })),
             });
 
             const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
-
             const canShare = await Sharing.isAvailableAsync();
             if (canShare) {
                 await Sharing.shareAsync(uri, {
                     mimeType: "application/pdf",
-                    dialogTitle: `Reporte Financiero ADI — ${label}`,
+                    dialogTitle: `Reporte ${report.month} ${report.year} — ADI`,
                     UTI: "com.adobe.pdf",
                 });
             }
@@ -536,9 +438,7 @@ export default function ReportsScreen() {
         }
     };
 
-    const currentLabel = rangeLabel(range, mode);
-
-    // ── Render ────────────────────────────────────────────────────────────────
+    // ─── Render ───────────────────────────────────────────────────────────────
     return (
         <View style={styles.root}>
             <StatusBar barStyle="dark-content" backgroundColor={Colors.screen.bg} />
@@ -546,186 +446,153 @@ export default function ReportsScreen() {
 
                 {/* Header */}
                 <View style={styles.header}>
-                    <TouchableOpacity
-                        style={styles.backBtn}
-                        onPress={() => router.push("/(finance)" as any)}
-                        activeOpacity={0.7}
-                    >
+                    <TouchableOpacity style={styles.backBtn} onPress={() => router.push("/(finance)" as any)} activeOpacity={0.7}>
                         <Ionicons name="chevron-back" size={18} color={Colors.screen.textSecondary} />
                     </TouchableOpacity>
                     <View style={{ flex: 1 }}>
-                        <Text style={styles.headerTitle}>Reportes financieros</Text>
-                        <Text style={styles.headerSubtitle}>Análisis de ingresos y egresos</Text>
+                        <Text style={styles.headerTitle}>Reporte financiero</Text>
+                        <Text style={styles.headerSubtitle}>Estado mensual de ingresos y egresos</Text>
                     </View>
                     <TouchableOpacity
-                        style={styles.shareBtn}
+                        style={[styles.shareBtn, (!report || sharing) && { opacity: 0.5 }]}
                         onPress={handleShare}
-                        disabled={sharing || isLoading}
+                        disabled={!report || sharing || isLoading}
                         activeOpacity={0.8}
                     >
                         {sharing
                             ? <ActivityIndicator size="small" color={Colors.primary.main} />
-                            : <Ionicons name="share-outline" size={18} color={Colors.primary.main} />
+                            : <Ionicons name="document-outline" size={18} color={Colors.primary.main} />
                         }
                     </TouchableOpacity>
                 </View>
 
-                {/* ── Barra de filtros (SIEMPRE VISIBLE) ─────────────────── */}
+                {/* Selector de mes */}
                 <View style={styles.filterBar}>
-                    {/* Mode toggle */}
-                    <View style={styles.modeToggle}>
-                        {(["annual", "monthly"] as ReportMode[]).map(m => (
-                            <TouchableOpacity
-                                key={m}
-                                style={[styles.modeBtn, mode === m && styles.modeBtnActive]}
-                                onPress={() => setMode(m)}
-                                activeOpacity={0.8}
-                            >
-                                <Ionicons
-                                    name={m === "annual" ? "calendar" : "calendar-outline"}
-                                    size={13}
-                                    color={mode === m ? Colors.primary.dark : Colors.screen.textMuted}
-                                />
-                                <Text style={[styles.modeBtnText, mode === m && styles.modeBtnTextActive]}>
-                                    {m === "annual" ? "Anual" : "Mensual"}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    {/* Date range button */}
-                    <TouchableOpacity
-                        style={styles.rangeBtn}
-                        onPress={() => setShowPicker(true)}
-                        activeOpacity={0.8}
-                    >
-                        <Ionicons name="options-outline" size={14} color={Colors.primary.dark} />
-                        <Text style={styles.rangeBtnText} numberOfLines={1}>{currentLabel}</Text>
+                    <Ionicons name="calendar-outline" size={15} color={Colors.screen.textMuted} />
+                    <Text style={styles.filterLabel}>Período:</Text>
+                    <TouchableOpacity style={styles.periodBtn} onPress={() => setShowPicker(true)} activeOpacity={0.8}>
+                        <Text style={styles.periodBtnText}>
+                            {fundLoading ? "Cargando..." : periodLabel}
+                        </Text>
                         <Ionicons name="chevron-down" size={12} color={Colors.primary.dark} />
                     </TouchableOpacity>
+                    {!fundLoading && availableMonths.length === 0 && (
+                        <TouchableOpacity onPress={() => router.push("/(finance)/admin-quota" as any)} activeOpacity={0.8}>
+                            <Text style={styles.configLink}>Configurar →</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
-                {/* Content */}
-                {isLoading ? (
+                {/* Contenido */}
+                {fundLoading ? (
                     <View style={styles.centered}>
                         <ActivityIndicator size="large" color={Colors.primary.main} />
-                        <Text style={styles.stateText}>Generando reporte...</Text>
+                        <Text style={styles.stateText}>Cargando configuración...</Text>
+                    </View>
+                ) : availableMonths.length === 0 ? (
+                    <View style={styles.centered}>
+                        <View style={styles.emptyIconWrap}>
+                            <Ionicons name="settings-outline" size={32} color={Colors.screen.textMuted} />
+                        </View>
+                        <Text style={styles.emptyTitle}>Fondo inicial no configurado</Text>
+                        <Text style={styles.stateText}>
+                            Para ver reportes, configura el fondo inicial y fecha de inicio en "Configuración financiera".
+                        </Text>
+                        <TouchableOpacity style={styles.retryBtn} onPress={() => router.push("/(finance)/admin-quota" as any)}>
+                            <Ionicons name="settings-outline" size={14} color={Colors.primary.dark} />
+                            <Text style={styles.retryText}>Ir a configuración</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : isLoading ? (
+                    <View style={styles.centered}>
+                        <ActivityIndicator size="large" color={Colors.primary.main} />
+                        <Text style={styles.stateText}>Cargando reporte...</Text>
                     </View>
                 ) : error ? (
                     <View style={styles.centered}>
                         <Ionicons name="cloud-offline-outline" size={36} color={Colors.screen.textMuted} />
                         <Text style={styles.stateText}>{error}</Text>
-                        <TouchableOpacity style={styles.retryBtn} onPress={loadData}>
+                        <TouchableOpacity style={styles.retryBtn} onPress={() => selectedMonth && loadData(selectedMonth)}>
                             <Ionicons name="refresh" size={14} color={Colors.primary.dark} />
                             <Text style={styles.retryText}>Reintentar</Text>
                         </TouchableOpacity>
                     </View>
-                ) : (
-                    <ScrollView
-                        contentContainerStyle={styles.scroll}
-                        showsVerticalScrollIndicator={false}
-                    >
+                ) : !report ? null : (
+                    <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+
                         {/* ── KPIs ─────────────────────────────────────────── */}
                         <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>RESUMEN DEL PERÍODO</Text>
+                            <Text style={styles.sectionTitle}>RESUMEN DEL MES</Text>
                             <View style={styles.sectionLine} />
                         </View>
 
                         <View style={styles.kpiGrid}>
                             <KpiCard
-                                icon="arrow-up-circle"
-                                label="Ingresos"
-                                value={fmtShort(annual.totalIncome)}
-                                sub={annual.totalExpected > 0 ? `${annual.collectionRate}% cobranza` : undefined}
-                                color={Colors.status.success}
-                                bg={Colors.status.successBg}
-                                border={Colors.status.successBorder}
+                                icon="arrow-up-circle" label="Ingresos" value={fmtShort(report.income)}
+                                sub={report.expectedIncome > 0 ? `${collectionRate}% cobranza` : undefined}
+                                color={Colors.status.success} bg={Colors.status.successBg} border={Colors.status.successBorder}
                             />
                             <KpiCard
-                                icon="arrow-down-circle"
-                                label="Egresos"
-                                value={fmtShort(annual.totalExpenses + annual.totalIncidentCosts)}
-                                sub={annual.avgMonthlyExpense > 0 ? `${fmtShort(annual.avgMonthlyExpense)}/mes` : undefined}
-                                color={Colors.status.error}
-                                bg={Colors.status.errorBg}
-                                border={Colors.status.errorBorder}
+                                icon="arrow-down-circle" label="Egresos" value={fmtShort(report.expenses + report.incidentCosts)}
+                                color={Colors.status.error} bg={Colors.status.errorBg} border={Colors.status.errorBorder}
                             />
                         </View>
 
-                        {/* Flujo neto */}
+                        {/* Balance */}
                         <View style={[styles.netFlowCard, {
-                            borderTopColor: annual.netFlow >= 0 ? Colors.status.success : Colors.status.error,
+                            borderTopColor: report.netFlow >= 0 ? Colors.status.success : Colors.status.error,
                         }]}>
                             <View style={styles.netFlowLeft}>
-                                <Text style={styles.netFlowLabel}>FLUJO NETO · {currentLabel}</Text>
+                                <Text style={styles.netFlowLabel}>BALANCE · {periodLabel.toUpperCase()}</Text>
                                 <Text style={[styles.netFlowValue, {
-                                    color: annual.netFlow >= 0 ? Colors.primary.dark : Colors.status.error,
+                                    color: report.netFlow >= 0 ? Colors.primary.dark : Colors.status.error,
                                 }]}>
-                                    {annual.netFlow >= 0 ? "+" : ""}{fmt(annual.netFlow)}
+                                    {report.netFlow >= 0 ? "+" : ""}{fmt(report.netFlow)}
                                 </Text>
                             </View>
                             <View style={[styles.netFlowBadge, {
-                                backgroundColor: annual.netFlow >= 0 ? Colors.status.successBg : Colors.status.errorBg,
-                                borderColor: annual.netFlow >= 0 ? Colors.status.successBorder : Colors.status.errorBorder,
+                                backgroundColor: report.netFlow >= 0 ? Colors.status.successBg : Colors.status.errorBg,
+                                borderColor: report.netFlow >= 0 ? Colors.status.successBorder : Colors.status.errorBorder,
                             }]}>
-                                <Ionicons
-                                    name={annual.netFlow >= 0 ? "trending-up" : "trending-down"}
-                                    size={20}
-                                    color={annual.netFlow >= 0 ? Colors.status.success : Colors.status.error}
-                                />
+                                <Ionicons name={report.netFlow >= 0 ? "trending-up" : "trending-down"} size={20}
+                                    color={report.netFlow >= 0 ? Colors.status.success : Colors.status.error} />
                                 <Text style={[styles.netFlowBadgeText, {
-                                    color: annual.netFlow >= 0 ? Colors.status.success : Colors.status.error,
+                                    color: report.netFlow >= 0 ? Colors.status.success : Colors.status.error,
                                 }]}>
-                                    {annual.netFlow >= 0 ? "Superávit" : "Déficit"}
+                                    {report.netFlow >= 0 ? "Superávit" : "Déficit"}
                                 </Text>
                             </View>
                         </View>
 
-                        {/* ── Cobranza ──────────────────────────────────────── */}
-                        {annual.totalExpected > 0 && (
+                        {/* Cobranza */}
+                        {report.expectedIncome > 0 && (
                             <>
                                 <View style={styles.sectionHeader}>
                                     <Text style={styles.sectionTitle}>COBRANZA DE CUOTAS</Text>
                                     <View style={styles.sectionLine} />
                                 </View>
-
-                                <View style={styles.collectionCard}>
+                                <View style={styles.card}>
                                     <View style={styles.collectionHeader}>
                                         <View style={{ flex: 1 }}>
                                             <Text style={styles.collectionTitle}>Tasa de cobranza</Text>
                                             <Text style={styles.collectionSub}>
-                                                {fmt(annual.totalIncome)} de {fmt(annual.totalExpected)} esperados
+                                                {fmt(report.income)} de {fmt(report.expectedIncome)} esperados
                                             </Text>
                                         </View>
                                         <Text style={[styles.collectionPct, {
-                                            color: annual.collectionRate >= 80
-                                                ? Colors.status.success
-                                                : annual.collectionRate >= 50
-                                                    ? Colors.status.warning
-                                                    : Colors.status.error,
-                                        }]}>
-                                            {annual.collectionRate}%
-                                        </Text>
+                                            color: collectionRate >= 80 ? Colors.status.success
+                                                : collectionRate >= 50 ? Colors.status.warning : Colors.status.error,
+                                        }]}>{collectionRate}%</Text>
                                     </View>
-                                    <ProgressBar
-                                        value={annual.totalIncome}
-                                        max={annual.totalExpected}
-                                        color={
-                                            annual.collectionRate >= 80
-                                                ? Colors.status.success
-                                                : annual.collectionRate >= 50
-                                                    ? Colors.status.warning
-                                                    : Colors.status.error
-                                        }
-                                    />
-                                    {annual.totalDeficit > 0 && (
+                                    <ProgressBar value={report.income} max={report.expectedIncome}
+                                        color={collectionRate >= 80 ? Colors.status.success
+                                            : collectionRate >= 50 ? Colors.status.warning : Colors.status.error} />
+                                    {report.deficit > 0 && (
                                         <View style={styles.deficitNote}>
                                             <Ionicons name="alert-circle-outline" size={13} color={Colors.status.error} />
                                             <Text style={styles.deficitNoteText}>
-                                                Déficit acumulado:{" "}
-                                                <Text style={{ fontFamily: "Outfit_700Bold" }}>
-                                                    {fmt(annual.totalDeficit)}
-                                                </Text>
+                                                Déficit:{" "}
+                                                <Text style={{ fontFamily: "Outfit_700Bold" }}>{fmt(report.deficit)}</Text>
                                             </Text>
                                         </View>
                                     )}
@@ -733,182 +600,138 @@ export default function ReportsScreen() {
                             </>
                         )}
 
-                        {/* ── Stats ─────────────────────────────────────────── */}
-                        <View style={styles.statsGrid}>
-                            <View style={styles.statCard}>
-                                <Ionicons name="medal-outline" size={18} color="#0891B2" />
-                                <Text style={styles.statCardValue}>{annual.bestMonth.slice(0, 3)}</Text>
-                                <Text style={styles.statCardLabel}>Mejor mes</Text>
-                                <Text style={styles.statCardSub}>en ingresos</Text>
-                            </View>
-                            <View style={styles.statCard}>
-                                <Ionicons name="construct-outline" size={18} color={Colors.status.warning} />
-                                <Text style={styles.statCardValue}>{fmtShort(annual.totalIncidentCosts)}</Text>
-                                <Text style={styles.statCardLabel}>Incidencias</Text>
-                                <Text style={styles.statCardSub}>costo total</Text>
-                            </View>
-                            <View style={styles.statCard}>
-                                <Ionicons name="business-outline" size={18} color={Colors.primary.main} />
-                                <Text style={styles.statCardValue}>{activeDepts}</Text>
-                                <Text style={styles.statCardLabel}>Deptos</Text>
-                                <Text style={styles.statCardSub}>activos</Text>
-                            </View>
-                        </View>
-
-                        {/* ── Tabla mensual ─────────────────────────────────── */}
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>DETALLE POR MES</Text>
-                            <View style={styles.sectionLine} />
-                        </View>
-
-                        {activeMonths.length === 0 ? (
-                            <View style={styles.emptyCard}>
-                                <View style={styles.emptyIconWrap}>
-                                    <Ionicons name="document-text-outline" size={32} color={Colors.screen.textMuted} />
-                                </View>
-                                <Text style={styles.emptyTitle}>Sin actividad en este período</Text>
-                                <Text style={styles.stateText}>
-                                    No hay registros de ingresos ni gastos para las fechas seleccionadas.
-                                </Text>
-                                <TouchableOpacity
-                                    style={styles.retryBtn}
-                                    onPress={() => setShowPicker(true)}
-                                    activeOpacity={0.8}
-                                >
-                                    <Ionicons name="options-outline" size={14} color={Colors.primary.dark} />
-                                    <Text style={styles.retryText}>Cambiar rango</Text>
-                                </TouchableOpacity>
-                            </View>
-                        ) : (
-                            <View style={styles.tableCard}>
-                                <View style={styles.tableHeader}>
-                                    <Text style={[styles.tableHeaderText, { width: 70 }]}>MES</Text>
-                                    <Text style={[styles.tableHeaderText, { flex: 1, textAlign: "right", color: Colors.status.success }]}>
-                                        INGRESO
-                                    </Text>
-                                    <Text style={[styles.tableHeaderText, { flex: 1, textAlign: "right", color: Colors.status.error }]}>
-                                        EGRESO
-                                    </Text>
-                                    <Text style={[styles.tableHeaderText, { flex: 1, textAlign: "right" }]}>
-                                        NETO
-                                    </Text>
-                                </View>
-                                <View style={styles.tableDivider} />
-                                {activeMonths.map((r, i) => (
-                                    <MonthRow key={`${r.year}-${r.monthIndex}`} report={r} isEven={i % 2 === 0} />
-                                ))}
-                                <View style={styles.tableDivider} />
-                                <View style={styles.tableTotal}>
-                                    <Text style={[styles.tableTotalText, { width: 70 }]}>TOTAL</Text>
-                                    <Text style={[styles.tableTotalText, { flex: 1, textAlign: "right", color: Colors.status.success }]}>
-                                        {fmtShort(annual.totalIncome)}
-                                    </Text>
-                                    <Text style={[styles.tableTotalText, { flex: 1, textAlign: "right", color: Colors.status.error }]}>
-                                        {fmtShort(annual.totalExpenses + annual.totalIncidentCosts)}
-                                    </Text>
-                                    <Text style={[styles.tableTotalText, {
-                                        flex: 1, textAlign: "right",
-                                        color: annual.netFlow >= 0 ? Colors.primary.dark : Colors.status.error,
-                                    }]}>
-                                        {annual.netFlow >= 0 ? "+" : ""}{fmtShort(annual.netFlow)}
-                                    </Text>
-                                </View>
-                            </View>
-                        )}
-
-                        {/* ── Gráfica ───────────────────────────────────────── */}
-                        {activeMonths.length > 0 && (
+                        {/* Tabla de departamentos */}
+                        {deptRows.length > 0 && (
                             <>
                                 <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>INGRESOS VS EGRESOS</Text>
+                                    <Text style={styles.sectionTitle}>PAGO POR DEPARTAMENTO</Text>
                                     <View style={styles.sectionLine} />
                                 </View>
-                                <View style={styles.chartCard}>
-                                    <View style={styles.chartLegend}>
-                                        {[
-                                            { color: Colors.status.success, label: "Ingresos" },
-                                            { color: Colors.status.error, label: "Egresos" },
-                                            { color: Colors.primary.main, label: "Esperado" },
-                                        ].map((item) => (
-                                            <View key={item.label} style={styles.legendItem}>
-                                                <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                                                <Text style={styles.legendText}>{item.label}</Text>
-                                            </View>
-                                        ))}
+
+                                <View style={styles.deptSummaryRow}>
+                                    <View style={[styles.deptSummaryChip, { backgroundColor: Colors.status.successBg, borderColor: Colors.status.successBorder }]}>
+                                        <Ionicons name="checkmark-circle" size={13} color={Colors.status.success} />
+                                        <Text style={[styles.deptSummaryText, { color: Colors.status.success }]}>
+                                            {report.paidDepts} pagados
+                                        </Text>
                                     </View>
-                                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                        <View style={styles.chartBars}>
-                                            {activeMonths.map(r => {
-                                                const maxVal = Math.max(r.income, r.expenses + r.incidentCosts, r.expectedIncome, 1);
-                                                const incomeH = Math.max((r.income / maxVal) * 110, r.income > 0 ? 4 : 0);
-                                                const expenseH = Math.max(((r.expenses + r.incidentCosts) / maxVal) * 110, (r.expenses + r.incidentCosts) > 0 ? 4 : 0);
-                                                const expectedH = Math.max((r.expectedIncome / maxVal) * 110, r.expectedIncome > 0 ? 4 : 0);
-                                                return (
-                                                    <View key={`${r.year}-${r.monthIndex}`} style={styles.barGroup}>
-                                                        <View style={styles.barRow}>
-                                                            <View style={[styles.bar, { height: incomeH, backgroundColor: Colors.status.success }]} />
-                                                            <View style={[styles.bar, { height: expenseH, backgroundColor: Colors.status.error }]} />
-                                                            {r.expectedIncome > 0 && (
-                                                                <View style={[styles.bar, { height: expectedH, backgroundColor: Colors.primary.main, opacity: 0.45 }]} />
-                                                            )}
-                                                        </View>
-                                                        <Text style={styles.barLabel}>{r.month.slice(0, 3)}</Text>
-                                                        {activeMonths.some(m => m.year !== activeMonths[0].year) && (
-                                                            <Text style={styles.barLabelYear}>{String(r.year).slice(2)}</Text>
-                                                        )}
-                                                    </View>
-                                                );
-                                            })}
+                                    {report.partialDepts > 0 && (
+                                        <View style={[styles.deptSummaryChip, { backgroundColor: Colors.status.warningBg, borderColor: Colors.status.warningBorder }]}>
+                                            <Ionicons name="pie-chart-outline" size={13} color={Colors.status.warning} />
+                                            <Text style={[styles.deptSummaryText, { color: Colors.status.warning }]}>
+                                                {report.partialDepts} parciales
+                                            </Text>
                                         </View>
-                                    </ScrollView>
+                                    )}
+                                    <View style={[styles.deptSummaryChip, { backgroundColor: Colors.status.errorBg, borderColor: Colors.status.errorBorder }]}>
+                                        <Ionicons name="time-outline" size={13} color={Colors.status.error} />
+                                        <Text style={[styles.deptSummaryText, { color: Colors.status.error }]}>
+                                            {report.totalDepts - report.paidDepts - report.partialDepts} pendientes
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.tableCard}>
+                                    <View style={styles.tableHeader}>
+                                        <Text style={[styles.tableHeaderText, { width: 52 }]}>DEPTO</Text>
+                                        <Text style={[styles.tableHeaderText, { flex: 1, textAlign: "right" }]}>CUOTA</Text>
+                                        <Text style={[styles.tableHeaderText, { flex: 1, textAlign: "right" }]}>PAGADO</Text>
+                                        <Text style={[styles.tableHeaderText, { width: 76, textAlign: "center" }]}>ESTADO</Text>
+                                    </View>
+                                    <View style={styles.tableDivider} />
+
+                                    {deptRows.map((row, i) => {
+                                        let sColor: string = Colors.status.error;
+                                        let sBg: string = Colors.status.errorBg;
+                                        let sBorder: string = Colors.status.errorBorder;
+                                        let sLabel: string = "Pendiente";
+                                        if (row.isPartial) {
+                                            sColor = Colors.status.warning; sBg = Colors.status.warningBg;
+                                            sBorder = Colors.status.warningBorder; sLabel = "Parcial";
+                                        } else if (row.paid) {
+                                            sColor = Colors.status.success; sBg = Colors.status.successBg;
+                                            sBorder = Colors.status.successBorder; sLabel = "Pagado";
+                                        }
+                                        return (
+                                            <View key={row.depId} style={[styles.deptRow, i % 2 !== 0 && styles.deptRowAlt]}>
+                                                <View style={{ width: 52 }}>
+                                                    <Text style={styles.deptName}>{row.depName}</Text>
+                                                    {row.paidAt && <Text style={styles.deptDate}>{fmtDate(row.paidAt)}</Text>}
+                                                </View>
+                                                <Text style={[styles.deptAmount, { flex: 1, textAlign: "right", color: Colors.screen.textSecondary }]}>
+                                                    {row.amountExpected > 0 ? fmt(row.amountExpected) : "—"}
+                                                </Text>
+                                                <Text style={[styles.deptAmount, {
+                                                    flex: 1, textAlign: "right",
+                                                    color: row.paid ? (row.isPartial ? Colors.status.warning : Colors.status.success) : Colors.status.error,
+                                                }]}>
+                                                    {row.paid ? fmt(row.amountPaid) : "—"}
+                                                </Text>
+                                                <View style={{ width: 76, alignItems: "center" }}>
+                                                    <View style={[styles.statusBadge, { backgroundColor: sBg, borderColor: sBorder }]}>
+                                                        <Text style={[styles.statusBadgeText, { color: sColor }]}>{sLabel}</Text>
+                                                    </View>
+                                                </View>
+                                            </View>
+                                        );
+                                    })}
+
+                                    <View style={styles.tableDivider} />
+                                    <View style={styles.tableTotal}>
+                                        <Text style={[styles.tableTotalText, { width: 52 }]}>TOTAL</Text>
+                                        <Text style={[styles.tableTotalText, { flex: 1, textAlign: "right", color: Colors.screen.textSecondary }]}>
+                                            {report.expectedIncome > 0 ? fmt(report.expectedIncome) : "—"}
+                                        </Text>
+                                        <Text style={[styles.tableTotalText, { flex: 1, textAlign: "right", color: Colors.status.success }]}>
+                                            {fmt(report.income)}
+                                        </Text>
+                                        <View style={{ width: 76 }} />
+                                    </View>
                                 </View>
                             </>
                         )}
 
-                        {/* ── Desglose egresos ──────────────────────────────── */}
-                        {(annual.totalExpenses > 0 || annual.totalIncidentCosts > 0) && (
+                        {/* Egresos */}
+                        {expenseRows.length > 0 && (
                             <>
                                 <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>DESGLOSE DE EGRESOS</Text>
+                                    <Text style={styles.sectionTitle}>DETALLE DE EGRESOS</Text>
                                     <View style={styles.sectionLine} />
                                 </View>
-                                <View style={styles.card}>
-                                    <View style={styles.egresosRow}>
-                                        <View style={[styles.egresosDot, { backgroundColor: Colors.status.error }]} />
-                                        <Text style={styles.egresosLabel}>Gastos operativos</Text>
-                                        <Text style={styles.egresosValue}>{fmt(annual.totalExpenses)}</Text>
-                                        <Text style={styles.egresosPct}>
-                                            {pct(annual.totalExpenses, annual.totalExpenses + annual.totalIncidentCosts)}%
-                                        </Text>
+                                <View style={styles.tableCard}>
+                                    <View style={styles.tableHeader}>
+                                        <Text style={[styles.tableHeaderText, { width: 80 }]}>FECHA</Text>
+                                        <Text style={[styles.tableHeaderText, { flex: 1 }]}>CONCEPTO</Text>
+                                        <Text style={[styles.tableHeaderText, { width: 80, textAlign: "right" }]}>MONTO</Text>
                                     </View>
-                                    <ProgressBar value={annual.totalExpenses} max={annual.totalExpenses + annual.totalIncidentCosts} color={Colors.status.error} />
-                                    <View style={[styles.egresosRow, { marginTop: 14 }]}>
-                                        <View style={[styles.egresosDot, { backgroundColor: Colors.status.warning }]} />
-                                        <Text style={styles.egresosLabel}>Costos incidencias</Text>
-                                        <Text style={styles.egresosValue}>{fmt(annual.totalIncidentCosts)}</Text>
-                                        <Text style={styles.egresosPct}>
-                                            {pct(annual.totalIncidentCosts, annual.totalExpenses + annual.totalIncidentCosts)}%
-                                        </Text>
-                                    </View>
-                                    <ProgressBar value={annual.totalIncidentCosts} max={annual.totalExpenses + annual.totalIncidentCosts} color={Colors.status.warning} />
-                                    <View style={styles.egresosTotalRow}>
-                                        <Text style={styles.egresosTotalLabel}>Total egresos</Text>
-                                        <Text style={styles.egresosTotalValue}>
-                                            {fmt(annual.totalExpenses + annual.totalIncidentCosts)}
+                                    <View style={styles.tableDivider} />
+                                    {expenseRows.map((row, i) => (
+                                        <View key={i} style={[styles.expenseRow, i % 2 !== 0 && styles.deptRowAlt]}>
+                                            <Text style={[styles.expenseDate, { width: 80 }]}>{row.date}</Text>
+                                            <Text style={[styles.expenseConcept, { flex: 1 }]} numberOfLines={2}>{row.description}</Text>
+                                            <Text style={[styles.expenseAmount, { width: 80, textAlign: "right" }]}>{fmt(row.amount)}</Text>
+                                        </View>
+                                    ))}
+                                    <View style={styles.tableDivider} />
+                                    <View style={styles.tableTotal}>
+                                        <Text style={[styles.tableTotalText, { width: 80 }]}>TOTAL</Text>
+                                        <View style={{ flex: 1 }} />
+                                        <Text style={[styles.tableTotalText, { width: 80, textAlign: "right", color: Colors.status.error }]}>
+                                            {fmt(report.expenses + report.incidentCosts)}
                                         </Text>
                                     </View>
                                 </View>
                             </>
                         )}
 
-                        {/* ── Alertas ───────────────────────────────────────── */}
-                        {(annual.totalDeficit > 0 || annual.collectionRate < 80 || annual.netFlow < 0) && (
+                        {/* Alertas */}
+                        {(report.netFlow < 0 || collectionRate < 80) && report.expectedIncome > 0 && (
                             <>
                                 <View style={styles.sectionHeader}>
                                     <Text style={styles.sectionTitle}>ALERTAS</Text>
                                     <View style={styles.sectionLine} />
                                 </View>
-                                {annual.netFlow < 0 && (
+                                {report.netFlow < 0 && (
                                     <View style={[styles.alertCard, styles.alertCardError]}>
                                         <View style={styles.alertIconWrap}>
                                             <Ionicons name="trending-down" size={18} color={Colors.status.error} />
@@ -916,35 +739,25 @@ export default function ReportsScreen() {
                                         <View style={{ flex: 1 }}>
                                             <Text style={[styles.alertTitle, { color: Colors.status.error }]}>Flujo negativo</Text>
                                             <Text style={styles.alertBody}>
-                                                Los egresos superan los ingresos en {fmt(Math.abs(annual.netFlow))} en este período.
+                                                Los egresos superan los ingresos en{" "}
+                                                <Text style={{ fontFamily: "Outfit_700Bold" }}>{fmt(Math.abs(report.netFlow))}</Text>.
                                             </Text>
                                         </View>
                                     </View>
                                 )}
-                                {annual.collectionRate < 80 && annual.totalExpected > 0 && (
+                                {collectionRate < 80 && (
                                     <View style={[styles.alertCard, styles.alertCardWarning]}>
                                         <View style={styles.alertIconWrap}>
                                             <Ionicons name="alert-circle-outline" size={18} color={Colors.status.warning} />
                                         </View>
                                         <View style={{ flex: 1 }}>
                                             <Text style={[styles.alertTitle, { color: Colors.status.warning }]}>
-                                                Cobranza baja ({annual.collectionRate}%)
+                                                Cobranza baja ({collectionRate}%)
                                             </Text>
                                             <Text style={styles.alertBody}>
-                                                Se han dejado de recaudar {fmt(annual.totalDeficit)} del total esperado.
-                                            </Text>
-                                        </View>
-                                    </View>
-                                )}
-                                {annual.totalIncidentCosts > annual.totalExpenses && (
-                                    <View style={[styles.alertCard, styles.alertCardWarning]}>
-                                        <View style={styles.alertIconWrap}>
-                                            <Ionicons name="construct-outline" size={18} color={Colors.status.warning} />
-                                        </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={[styles.alertTitle, { color: Colors.status.warning }]}>Alto costo en incidencias</Text>
-                                            <Text style={styles.alertBody}>
-                                                Los costos de reparaciones ({fmt(annual.totalIncidentCosts)}) superan los gastos operativos regulares.
+                                                {report.totalDepts - report.paidDepts - report.partialDepts} departamentos pendientes.
+                                                Déficit:{" "}
+                                                <Text style={{ fontFamily: "Outfit_700Bold" }}>{fmt(report.deficit)}</Text>.
                                             </Text>
                                         </View>
                                     </View>
@@ -952,22 +765,37 @@ export default function ReportsScreen() {
                             </>
                         )}
 
+                        {/* Botón exportar */}
+                        <TouchableOpacity
+                            style={[styles.pdfBtn, sharing && { opacity: 0.7 }]}
+                            onPress={handleShare}
+                            disabled={sharing}
+                            activeOpacity={0.85}
+                        >
+                            {sharing
+                                ? <ActivityIndicator size="small" color="#fff" />
+                                : <Ionicons name="document-outline" size={18} color="#fff" />
+                            }
+                            <Text style={styles.pdfBtnText}>
+                                {sharing ? "Generando PDF..." : "Exportar reporte PDF"}
+                            </Text>
+                        </TouchableOpacity>
+
                         <View style={styles.footerNote}>
                             <Ionicons name="information-circle-outline" size={13} color={Colors.screen.textMuted} />
                             <Text style={styles.footerNoteText}>
-                                Reporte generado automáticamente · {new Date().toLocaleDateString("es-MX")}
+                                El PDF incluye tabla detallada por departamento · {new Date().toLocaleDateString("es-MX")}
                             </Text>
                         </View>
                     </ScrollView>
                 )}
             </SafeAreaView>
 
-            {/* Date Range Picker */}
-            <DateRangePicker
+            <MonthYearPicker
                 visible={showPicker}
-                mode={mode}
-                range={range}
-                onApply={setRange}
+                availableMonths={availableMonths}
+                selectedKey={selectedMonth?.key ?? ""}
+                onApply={(m) => setSelectedMonth(m)}
                 onClose={() => setShowPicker(false)}
             />
         </View>
@@ -978,12 +806,10 @@ export default function ReportsScreen() {
 
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
-
     header: {
         flexDirection: "row", alignItems: "center", gap: 8,
         paddingHorizontal: 16, paddingVertical: 14,
-        backgroundColor: Colors.screen.card,
-        borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
+        backgroundColor: Colors.screen.card, borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
     },
     backBtn: {
         width: 36, height: 36, borderRadius: 10,
@@ -997,89 +823,49 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
         alignItems: "center", justifyContent: "center",
     },
-
-    // Filter bar
     filterBar: {
-        flexDirection: "row", alignItems: "center", gap: 10,
+        flexDirection: "row", alignItems: "center", gap: 8,
         paddingHorizontal: 16, paddingVertical: 10,
-        backgroundColor: Colors.screen.card,
-        borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
+        backgroundColor: Colors.screen.card, borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
     },
-    modeToggle: {
-        flexDirection: "row", borderRadius: 10, overflow: "hidden",
-        borderWidth: 1, borderColor: Colors.screen.border,
-        backgroundColor: Colors.screen.bg,
-    },
-    modeBtn: {
-        flexDirection: "row", alignItems: "center", gap: 5,
-        paddingHorizontal: 12, paddingVertical: 7,
-    },
-    modeBtnActive: {
-        backgroundColor: Colors.primary.soft,
-    },
-    modeBtnText: {
-        fontFamily: "Outfit_600SemiBold", fontSize: 12,
-        color: Colors.screen.textMuted,
-    },
-    modeBtnTextActive: { color: Colors.primary.dark },
-
-    rangeBtn: {
-        flex: 1, flexDirection: "row", alignItems: "center", gap: 6,
-        paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+    filterLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.screen.textMuted },
+    periodBtn: {
+        flexDirection: "row", alignItems: "center", gap: 6,
+        paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10,
         backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
     },
-    rangeBtnText: {
-        flex: 1, fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.primary.dark,
-    },
-
+    periodBtnText: { fontFamily: "Outfit_700Bold", fontSize: 13, color: Colors.primary.dark },
+    configLink: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.status.warning, marginLeft: 4 },
     scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 48, gap: 12 },
-
     centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
-    stateText: {
-        fontFamily: "Outfit_400Regular", fontSize: 13,
-        color: Colors.screen.textMuted, textAlign: "center", lineHeight: 20,
+    emptyIconWrap: {
+        width: 64, height: 64, borderRadius: 20,
+        backgroundColor: Colors.neutral[100], alignItems: "center", justifyContent: "center",
     },
+    emptyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 16, color: Colors.screen.textSecondary },
+    stateText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: Colors.screen.textMuted, textAlign: "center", lineHeight: 20 },
     retryBtn: {
         flexDirection: "row", alignItems: "center", gap: 6,
         paddingHorizontal: 16, paddingVertical: 9, borderRadius: 10,
         backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
     },
     retryText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.primary.dark },
-
     sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
-    sectionTitle: {
-        fontFamily: "Outfit_700Bold", fontSize: 10,
-        color: Colors.screen.textMuted, letterSpacing: 1.8,
-    },
+    sectionTitle: { fontFamily: "Outfit_700Bold", fontSize: 10, color: Colors.screen.textMuted, letterSpacing: 1.8 },
     sectionLine: { flex: 1, height: 1, backgroundColor: Colors.screen.border },
-
     kpiGrid: { flexDirection: "row", gap: 10 },
-
     netFlowCard: {
-        backgroundColor: Colors.screen.card, borderRadius: 16,
-        borderWidth: 1, borderColor: Colors.screen.border,
-        borderTopWidth: 4, padding: 16,
+        backgroundColor: Colors.screen.card, borderRadius: 16, borderWidth: 1,
+        borderColor: Colors.screen.border, borderTopWidth: 4, padding: 16,
         flexDirection: "row", alignItems: "center", gap: 14,
-        shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+        shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
     },
     netFlowLeft: { flex: 1 },
-    netFlowLabel: {
-        fontFamily: "Outfit_700Bold", fontSize: 10,
-        color: Colors.screen.textMuted, letterSpacing: 1.5, marginBottom: 4,
-    },
+    netFlowLabel: { fontFamily: "Outfit_700Bold", fontSize: 10, color: Colors.screen.textMuted, letterSpacing: 1.5, marginBottom: 4 },
     netFlowValue: { fontFamily: "Outfit_900Black", fontSize: 28, letterSpacing: -0.5 },
-    netFlowBadge: {
-        flexDirection: "row", alignItems: "center", gap: 6,
-        paddingHorizontal: 12, paddingVertical: 8,
-        borderRadius: 12, borderWidth: 1,
-    },
+    netFlowBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },
     netFlowBadgeText: { fontFamily: "Outfit_700Bold", fontSize: 13 },
-
-    collectionCard: {
-        backgroundColor: Colors.screen.card, borderRadius: 14,
-        borderWidth: 1, borderColor: Colors.screen.border, padding: 16, gap: 10,
-    },
+    card: { backgroundColor: Colors.screen.card, borderRadius: 14, borderWidth: 1, borderColor: Colors.screen.border, padding: 16, gap: 10 },
     collectionHeader: { flexDirection: "row", alignItems: "center" },
     collectionTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textPrimary },
     collectionSub: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
@@ -1087,245 +873,81 @@ const styles = StyleSheet.create({
     deficitNote: {
         flexDirection: "row", alignItems: "center", gap: 6,
         backgroundColor: Colors.status.errorBg, borderRadius: 8,
-        borderWidth: 1, borderColor: Colors.status.errorBorder,
-        paddingHorizontal: 10, paddingVertical: 7,
+        borderWidth: 1, borderColor: Colors.status.errorBorder, paddingHorizontal: 10, paddingVertical: 7,
     },
     deficitNoteText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.status.error },
-
-    statsGrid: { flexDirection: "row", gap: 8 },
-    statCard: {
-        flex: 1, backgroundColor: Colors.screen.card, borderRadius: 13,
-        borderWidth: 1, borderColor: Colors.screen.border,
-        padding: 12, alignItems: "center", gap: 3,
-    },
-    statCardValue: { fontFamily: "Outfit_800ExtraBold", fontSize: 15, color: Colors.screen.textPrimary, marginTop: 4 },
-    statCardLabel: { fontFamily: "Outfit_600SemiBold", fontSize: 11, color: Colors.screen.textSecondary },
-    statCardSub: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.screen.textMuted },
-
-    tableCard: {
-        backgroundColor: Colors.screen.card, borderRadius: 14,
-        borderWidth: 1, borderColor: Colors.screen.border, overflow: "hidden",
-    },
-    tableHeader: {
-        flexDirection: "row", alignItems: "center",
-        paddingHorizontal: 14, paddingVertical: 10,
-        backgroundColor: Colors.screen.bg,
-    },
-    tableHeaderText: {
-        fontFamily: "Outfit_700Bold", fontSize: 9,
-        color: Colors.screen.textMuted, letterSpacing: 1.2,
-    },
+    deptSummaryRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+    deptSummaryChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
+    deptSummaryText: { fontFamily: "Outfit_600SemiBold", fontSize: 12 },
+    tableCard: { backgroundColor: Colors.screen.card, borderRadius: 14, borderWidth: 1, borderColor: Colors.screen.border, overflow: "hidden" },
+    tableHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 9, backgroundColor: Colors.screen.bg },
+    tableHeaderText: { fontFamily: "Outfit_700Bold", fontSize: 9, color: Colors.screen.textMuted, letterSpacing: 1.1 },
     tableDivider: { height: 1, backgroundColor: Colors.screen.border },
-    tableTotal: {
-        flexDirection: "row", alignItems: "center",
-        paddingHorizontal: 14, paddingVertical: 12,
-        backgroundColor: Colors.primary.soft,
-    },
+    tableTotal: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 11, backgroundColor: Colors.primary.soft },
     tableTotalText: { fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.screen.textPrimary },
-
-    chartCard: {
-        backgroundColor: Colors.screen.card, borderRadius: 14,
-        borderWidth: 1, borderColor: Colors.screen.border, padding: 16, gap: 14,
-    },
-    chartLegend: { flexDirection: "row", gap: 16 },
-    legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
-    legendDot: { width: 10, height: 10, borderRadius: 5 },
-    legendText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textSecondary },
-    chartBars: { flexDirection: "row", alignItems: "flex-end", gap: 12, height: 140, paddingBottom: 4 },
-    barGroup: { alignItems: "center", gap: 3, width: 52 },
-    barRow: { flexDirection: "row", alignItems: "flex-end", gap: 3, height: 110 },
-    bar: { width: 12, borderRadius: 4, minHeight: 2 },
-    barLabel: { fontFamily: "Outfit_500Medium", fontSize: 10, color: Colors.screen.textMuted },
-    barLabelYear: { fontFamily: "Outfit_400Regular", fontSize: 9, color: Colors.screen.textMuted },
-
-    card: {
-        backgroundColor: Colors.screen.card, borderRadius: 14,
-        borderWidth: 1, borderColor: Colors.screen.border, padding: 16, gap: 10,
-    },
-    egresosRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-    egresosDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
-    egresosLabel: { flex: 1, fontFamily: "Outfit_500Medium", fontSize: 13, color: Colors.screen.textSecondary },
-    egresosValue: { fontFamily: "Outfit_700Bold", fontSize: 13, color: Colors.screen.textPrimary },
-    egresosPct: {
-        fontFamily: "Outfit_600SemiBold", fontSize: 11,
-        color: Colors.screen.textMuted, width: 32, textAlign: "right",
-    },
-    egresosTotalRow: {
-        flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-        paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.screen.border, marginTop: 4,
-    },
-    egresosTotalLabel: { fontFamily: "Outfit_700Bold", fontSize: 13, color: Colors.screen.textPrimary },
-    egresosTotalValue: { fontFamily: "Outfit_800ExtraBold", fontSize: 16, color: Colors.status.error },
-
-    alertCard: {
-        flexDirection: "row", alignItems: "flex-start", gap: 12,
-        borderRadius: 13, borderWidth: 1, padding: 14,
-    },
+    deptRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10 },
+    deptRowAlt: { backgroundColor: Colors.neutral[50] },
+    deptName: { fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.screen.textPrimary },
+    deptDate: { fontFamily: "Outfit_400Regular", fontSize: 9, color: Colors.screen.textMuted, marginTop: 1 },
+    deptAmount: { fontFamily: "Outfit_700Bold", fontSize: 12 },
+    statusBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+    statusBadgeText: { fontFamily: "Outfit_700Bold", fontSize: 9 },
+    expenseRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 9, gap: 8 },
+    expenseDate: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.screen.textMuted },
+    expenseConcept: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textSecondary },
+    expenseAmount: { fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.screen.textPrimary },
+    alertCard: { flexDirection: "row", alignItems: "flex-start", gap: 12, borderRadius: 13, borderWidth: 1, padding: 14 },
     alertCardError: { backgroundColor: Colors.status.errorBg, borderColor: Colors.status.errorBorder },
     alertCardWarning: { backgroundColor: Colors.status.warningBg, borderColor: Colors.status.warningBorder },
-    alertIconWrap: {
-        width: 36, height: 36, borderRadius: 10,
-        backgroundColor: "rgba(255,255,255,0.7)",
-        alignItems: "center", justifyContent: "center", flexShrink: 0,
-    },
+    alertIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.7)", alignItems: "center", justifyContent: "center", flexShrink: 0 },
     alertTitle: { fontFamily: "Outfit_700Bold", fontSize: 13, marginBottom: 4 },
-    alertBody: {
-        fontFamily: "Outfit_400Regular", fontSize: 12,
-        color: Colors.screen.textSecondary, lineHeight: 18,
-    },
-
-    emptyCard: {
-        backgroundColor: Colors.screen.card, borderRadius: 16,
-        borderWidth: 1, borderColor: Colors.screen.border,
-        padding: 36, alignItems: "center", gap: 10,
-    },
-    emptyIconWrap: {
-        width: 64, height: 64, borderRadius: 20,
-        backgroundColor: Colors.neutral[100], alignItems: "center", justifyContent: "center",
-    },
-    emptyTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 16, color: Colors.screen.textSecondary },
-
-    footerNote: {
+    alertBody: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textSecondary, lineHeight: 18 },
+    pdfBtn: {
         flexDirection: "row", alignItems: "center", justifyContent: "center",
-        gap: 6, paddingTop: 4,
+        gap: 10, paddingVertical: 14, borderRadius: 14, backgroundColor: Colors.primary.main, marginTop: 4,
+        shadowColor: Colors.primary.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 5,
     },
-    footerNoteText: {
-        fontFamily: "Outfit_400Regular", fontSize: 10,
-        color: Colors.screen.textMuted, textAlign: "center", lineHeight: 15,
-    },
+    pdfBtnText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: "#fff" },
+    footerNote: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingTop: 4 },
+    footerNoteText: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.screen.textMuted, textAlign: "center", lineHeight: 15 },
 });
 
 const kpi = StyleSheet.create({
-    root: {
-        flex: 1, borderRadius: 14, borderWidth: 1,
-        padding: 14, alignItems: "center", gap: 4,
-        shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
-    },
-    iconWrap: {
-        width: 38, height: 38, borderRadius: 11,
-        alignItems: "center", justifyContent: "center", marginBottom: 4,
-    },
+    root: { flex: 1, borderRadius: 14, borderWidth: 1, padding: 14, alignItems: "center", gap: 4, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+    iconWrap: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 4 },
     value: { fontFamily: "Outfit_800ExtraBold", fontSize: 22, letterSpacing: -0.5 },
     label: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.screen.textSecondary },
     sub: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.screen.textMuted, textAlign: "center" },
 });
 
 const pb = StyleSheet.create({
-    track: {
-        height: 8, borderRadius: 4,
-        backgroundColor: Colors.screen.border, overflow: "hidden",
-    },
+    track: { height: 8, borderRadius: 4, backgroundColor: Colors.screen.border, overflow: "hidden" },
     fill: { height: "100%", borderRadius: 4 },
 });
 
-const mrow = StyleSheet.create({
-    root: {
-        flexDirection: "row", alignItems: "center",
-        paddingHorizontal: 14, paddingVertical: 10,
-    },
-    even: { backgroundColor: Colors.neutral[50] },
-    monthCol: { width: 70, gap: 2 },
-    monthName: { fontFamily: "Outfit_700Bold", fontSize: 13, color: Colors.screen.textPrimary },
-    monthYear: { fontFamily: "Outfit_400Regular", fontSize: 9, color: Colors.screen.textMuted },
-    coveragePill: {
-        alignSelf: "flex-start", paddingHorizontal: 5, paddingVertical: 1,
-        borderRadius: 4,
-    },
-    coverageText: { fontFamily: "Outfit_700Bold", fontSize: 9 },
-    incomCol: { flex: 1, alignItems: "flex-end", gap: 2 },
-    expCol: { flex: 1, alignItems: "flex-end", gap: 2 },
-    netCol: { flex: 1, alignItems: "flex-end" },
-    amount: { fontFamily: "Outfit_700Bold", fontSize: 12 },
-    sub: { fontFamily: "Outfit_400Regular", fontSize: 9, color: Colors.screen.textMuted },
-});
-
-// Date Range Picker styles
-const drp = StyleSheet.create({
-    overlay: {
-        flex: 1, backgroundColor: "rgba(0,0,0,0.45)",
-        justifyContent: "flex-end",
-    },
+const picker = StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
     sheet: {
-        backgroundColor: Colors.screen.card,
-        borderTopLeftRadius: 24, borderTopRightRadius: 24,
-        padding: 24, gap: 16,
-        shadowColor: "#000", shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.1, shadowRadius: 20, elevation: 20,
+        backgroundColor: Colors.screen.card, borderTopLeftRadius: 26, borderTopRightRadius: 26,
+        padding: 20, paddingBottom: 36, gap: 14, maxHeight: "80%",
+        shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 20,
     },
-    sheetHeader: {
-        flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    },
-    sheetTitle: { fontFamily: "Outfit_700Bold", fontSize: 18, color: Colors.screen.textPrimary },
-    sheetSub: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted, marginTop: 2 },
-    closeBtn: {
-        width: 32, height: 32, borderRadius: 10,
-        backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
-        alignItems: "center", justifyContent: "center",
-    },
-
-    tabs: { flexDirection: "row", gap: 10 },
-    tab: {
-        flex: 1, borderRadius: 12, padding: 12,
-        backgroundColor: Colors.screen.bg,
-        borderWidth: 1, borderColor: Colors.screen.border, gap: 2,
-    },
-    tabActive: {
-        backgroundColor: Colors.primary.soft, borderColor: Colors.primary.muted,
-    },
-    tabText: {
-        fontFamily: "Outfit_600SemiBold", fontSize: 11,
-        color: Colors.screen.textMuted, letterSpacing: 0.5,
-    },
-    tabTextActive: { color: Colors.primary.dark },
-    tabDate: {
-        fontFamily: "Outfit_700Bold", fontSize: 14, color: Colors.screen.textSecondary,
-    },
-    tabDateActive: { color: Colors.primary.dark },
-
-    pickerLabel: {
-        fontFamily: "Outfit_700Bold", fontSize: 10,
-        color: Colors.screen.textMuted, letterSpacing: 1.5,
-        marginBottom: 8, marginTop: 4,
-    },
-
-    monthGrid: {
-        flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8,
-    },
-    monthChip: {
-        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
-        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
-    },
-    monthChipActive: {
-        backgroundColor: Colors.primary.soft, borderColor: Colors.primary.muted,
-    },
-    monthChipText: {
-        fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.screen.textSecondary,
-    },
-    monthChipTextActive: { color: Colors.primary.dark },
-
-    yearList: { gap: 6, marginBottom: 8 },
-    yearItem: {
-        flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-        paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12,
-        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
-    },
-    yearItemActive: {
-        backgroundColor: Colors.primary.soft, borderColor: Colors.primary.muted,
-    },
-    yearItemText: { fontFamily: "Outfit_600SemiBold", fontSize: 15, color: Colors.screen.textSecondary },
-    yearItemTextActive: { color: Colors.primary.dark },
-
+    handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.screen.border, alignSelf: "center" },
+    sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    sheetTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: Colors.screen.textPrimary },
+    sheetSub: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
+    closeBtn: { width: 32, height: 32, borderRadius: 10, backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border, alignItems: "center", justifyContent: "center" },
+    emptyNote: { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: Colors.status.warningBg, borderRadius: 10, borderWidth: 1, borderColor: Colors.status.warningBorder, padding: 14 },
+    emptyNoteText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.status.warning, lineHeight: 18 },
+    monthList: { gap: 6, paddingBottom: 4 },
+    monthItem: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: Colors.screen.border, backgroundColor: Colors.screen.bg },
+    monthItemActive: { backgroundColor: Colors.primary.soft, borderColor: Colors.primary.muted },
+    monthItemName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
+    monthItemNameActive: { color: Colors.primary.dark },
+    monthItemYear: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 1 },
     actions: { flexDirection: "row", gap: 10 },
-    cancelBtn: {
-        flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: "center",
-        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
-    },
+    cancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: "center", backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border },
     cancelText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
-    applyBtn: {
-        flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center",
-        gap: 8, paddingVertical: 13, borderRadius: 12,
-        backgroundColor: Colors.primary.main,
-    },
+    applyBtn: { flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 13, borderRadius: 12, backgroundColor: Colors.primary.main },
     applyText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: "#fff" },
 });
