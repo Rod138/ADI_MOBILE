@@ -20,6 +20,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
 const CURRENT_YEAR = new Date().getFullYear();
 const CURRENT_MONTH_NAME = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -40,7 +42,38 @@ function formatDate(iso: string) {
     return d.toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
 }
 
-// ─── Date Picker Modal ────────────────────────────────────────────────────────
+/**
+ * Dado el startDate del fondo, devuelve un Set de claves "MesNombre-año"
+ * de períodos habilitados (desde startDate hasta el año siguiente).
+ * Incluye también el año siguiente completo (para cuotas futuras).
+ */
+function buildEnabledPeriods(startDate: string | null): Set<string> {
+    if (!startDate) return new Set(); // Si no hay fondo, ninguno habilitado
+
+    const start = new Date(startDate);
+    const startYear = start.getFullYear();
+    const startMonthIdx = start.getMonth(); // 0-indexed
+
+    const enabled = new Set<string>();
+
+    // Desde startDate hasta fin del próximo año
+    const endYear = CURRENT_YEAR + 1;
+    const MONTH_NAMES_ALL = [
+        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+    ];
+
+    for (let y = startYear; y <= endYear; y++) {
+        for (let m = 0; m < 12; m++) {
+            if (y === startYear && m < startMonthIdx) continue; // Antes del inicio
+            enabled.add(`${MONTH_NAMES_ALL[m]}-${y}`);
+        }
+    }
+
+    return enabled;
+}
+
+// ── Date Picker Modal ─────────────────────────────────────────────────────────
 
 function DatePickerModal({
     visible, selectedDate, onSelect, onClose, title,
@@ -121,9 +154,9 @@ function DatePickerModal({
     );
 }
 
-// ─── Tower Fund Section ───────────────────────────────────────────────────────
+// ── Tower Fund Section ────────────────────────────────────────────────────────
 
-function TowerFundSection() {
+function TowerFundSection({ onFundSaved }: { onFundSaved?: (startDate: string) => void }) {
     const { fund, isLoading, fetchFund, initFund, updateFund } = useTowerFund();
     const [amount, setAmount] = useState("");
     const [amountError, setAmountError] = useState<string | undefined>();
@@ -154,7 +187,7 @@ function TowerFundSection() {
         const parsedAmount = parseFloat(amount.replace(/,/g, ""));
         Alert.alert(
             initialized ? "Actualizar fondo inicial" : "Configurar fondo inicial",
-            `¿${initialized ? "Actualizar" : "Configurar"} el fondo inicial a ${formatCurrency(parsedAmount)}?\n\nFecha de inicio: ${formatDate(startDate)}\n\nA partir de esta fecha se calcularán todos los movimientos.`,
+            `¿${initialized ? "Actualizar" : "Configurar"} el fondo inicial a ${formatCurrency(parsedAmount)}?\n\nFecha de inicio: ${formatDate(startDate)}\n\nA partir de esta fecha se calcularán todos los movimientos y los períodos disponibles para cuotas.`,
             [
                 { text: "Cancelar", style: "cancel" },
                 {
@@ -166,7 +199,8 @@ function TowerFundSection() {
                         setSaving(false);
                         if (ok) {
                             setInitialized(true);
-                            Alert.alert("¡Listo!", `Fondo ${initialized ? "actualizado" : "configurado"} correctamente.`);
+                            onFundSaved?.(startDate);
+                            Alert.alert("¡Listo!", `Fondo ${initialized ? "actualizado" : "configurado"} correctamente.\n\nLos períodos para cuotas se han actualizado.`);
                         } else {
                             Alert.alert("Error", "No se pudo guardar el fondo. Intenta de nuevo.");
                         }
@@ -209,7 +243,7 @@ function TowerFundSection() {
             <View style={fundSec.infoBanner}>
                 <Ionicons name="information-circle-outline" size={14} color="#7C3AED" />
                 <Text style={fundSec.infoText}>
-                    El fondo inicial es el saldo de arranque de la torre. A partir de la fecha que elijas, se sumarán los ingresos y se restarán los gastos para calcular el balance general.
+                    El fondo inicial es el saldo de arranque de la torre. La <Text style={{ fontFamily: "Outfit_700Bold" }}>Fecha de inicio del cálculo</Text> también determina desde qué mes se pueden registrar cuotas.
                 </Text>
             </View>
 
@@ -234,7 +268,9 @@ function TowerFundSection() {
                     <Text style={fundSec.dateTriggerText}>{formatDate(startDate)}</Text>
                     <Ionicons name="chevron-down" size={14} color={Colors.screen.iconMuted} />
                 </TouchableOpacity>
-                <Text style={fundSec.dateHint}>Solo se contabilizarán movimientos posteriores a esta fecha.</Text>
+                <Text style={fundSec.dateHint}>
+                    Solo se contabilizarán movimientos posteriores a esta fecha. Los períodos de cuotas comenzarán desde este mes.
+                </Text>
             </View>
 
             {saving || isLoading ? (
@@ -260,15 +296,30 @@ function TowerFundSection() {
     );
 }
 
-// ─── Month Grid ───────────────────────────────────────────────────────────────
+// ── Month Grid (con restricción de fecha de inicio) ───────────────────────────
 
-function MonthGrid({ selectedMonth, selectedYear, existingQuotas, onSelectMonth, onSelectYear }: {
+function MonthGrid({
+    selectedMonth, selectedYear, existingQuotas,
+    onSelectMonth, onSelectYear, enabledPeriods, fundConfigured,
+}: {
     selectedMonth: string; selectedYear: number;
     existingQuotas: Array<{ month: string; year: number; amount: number }>;
     onSelectMonth: (m: string) => void; onSelectYear: (y: number) => void;
+    enabledPeriods: Set<string>;
+    fundConfigured: boolean;
 }) {
     return (
         <View>
+            {/* Aviso si no hay fondo configurado */}
+            {!fundConfigured && (
+                <View style={grid.noFundNote}>
+                    <Ionicons name="warning-outline" size={14} color={Colors.status.warning} />
+                    <Text style={grid.noFundNoteText}>
+                        Configura el fondo inicial primero para habilitar los períodos.
+                    </Text>
+                </View>
+            )}
+
             <View style={grid.yearRow}>
                 {YEARS.map(y => (
                     <TouchableOpacity key={y} style={[grid.yearBtn, selectedYear === y && grid.yearBtnActive]}
@@ -277,32 +328,71 @@ function MonthGrid({ selectedMonth, selectedYear, existingQuotas, onSelectMonth,
                     </TouchableOpacity>
                 ))}
             </View>
+
             <View style={grid.monthGrid}>
                 {MONTHS.map(m => {
+                    const periodKey = `${m.value}-${selectedYear}`;
+                    const isEnabled = !fundConfigured ? false : enabledPeriods.has(periodKey);
                     const existing = existingQuotas.find(q => q.month === m.value && q.year === selectedYear);
                     const isSelected = selectedMonth === m.value;
                     const isCurrent = m.value === CURRENT_MONTH_NAME && selectedYear === CURRENT_YEAR;
+
                     return (
                         <TouchableOpacity key={m.value}
-                            style={[grid.monthBtn, isSelected && grid.monthBtnActive, existing && !isSelected && grid.monthBtnHasQuota]}
-                            onPress={() => onSelectMonth(m.value)} activeOpacity={0.8}>
-                            <Text style={[grid.monthText, isSelected && grid.monthTextActive, existing && !isSelected && grid.monthTextHasQuota]}>
+                            style={[
+                                grid.monthBtn,
+                                isSelected && grid.monthBtnActive,
+                                existing && !isSelected && grid.monthBtnHasQuota,
+                                !isEnabled && grid.monthBtnDisabled,
+                            ]}
+                            onPress={() => isEnabled && onSelectMonth(m.value)}
+                            activeOpacity={isEnabled ? 0.8 : 1}
+                            disabled={!isEnabled}
+                        >
+                            <Text style={[
+                                grid.monthText,
+                                isSelected && grid.monthTextActive,
+                                existing && !isSelected && grid.monthTextHasQuota,
+                                !isEnabled && grid.monthTextDisabled,
+                            ]}>
                                 {m.label.slice(0, 3)}
                             </Text>
-                            {isCurrent && !isSelected && <View style={grid.currentDot} />}
-                            {existing && <Text style={[grid.quotaAmount, isSelected && { color: "#fff" }]}>{formatCurrency(existing.amount)}</Text>}
+                            {isCurrent && !isSelected && isEnabled && <View style={grid.currentDot} />}
+                            {existing && isEnabled && (
+                                <Text style={[grid.quotaAmount, isSelected && { color: "#fff" }]}>
+                                    {formatCurrency(existing.amount)}
+                                </Text>
+                            )}
+                            {!isEnabled && (
+                                <Ionicons name="lock-closed" size={8} color={Colors.screen.textMuted} style={{ opacity: 0.5 }} />
+                            )}
                         </TouchableOpacity>
                     );
                 })}
             </View>
+
+            {fundConfigured && (
+                <View style={grid.legendRow}>
+                    <View style={grid.legendItem}>
+                        <View style={[grid.legendDot, { backgroundColor: Colors.primary.soft, borderColor: Colors.primary.muted, borderWidth: 1 }]} />
+                        <Text style={grid.legendText}>Con cuota</Text>
+                    </View>
+                    <View style={grid.legendItem}>
+                        <View style={[grid.legendDot, { backgroundColor: Colors.screen.border }]} />
+                        <Text style={grid.legendText}>Bloqueado</Text>
+                    </View>
+                </View>
+            )}
         </View>
     );
 }
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
+// ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function AdminQuotaScreen() {
     const { quotas, isLoading, fetchAllQuotas, createQuota, updateQuota } = useMonthlyQuota();
+    const { fetchFund } = useTowerFund();
+
     const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH_NAME);
     const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
     const [amount, setAmount] = useState("");
@@ -310,7 +400,44 @@ export default function AdminQuotaScreen() {
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<"fondo" | "cuota">("fondo");
 
-    useEffect(() => { fetchAllQuotas(); }, []);
+    // Períodos habilitados según fecha de inicio del fondo
+    const [enabledPeriods, setEnabledPeriods] = useState<Set<string>>(new Set());
+    const [fundConfigured, setFundConfigured] = useState(false);
+    const [fundStartDate, setFundStartDate] = useState<string | null>(null);
+
+    const loadFundPeriods = async (startDate?: string) => {
+        try {
+            const fund = await fetchFund();
+            const sd = startDate ?? (fund as any)?.updated_at ?? null;
+            setFundStartDate(sd);
+            setFundConfigured(!!sd);
+            setEnabledPeriods(buildEnabledPeriods(sd));
+
+            // Si el mes seleccionado no está habilitado, mover al primer mes habilitado
+            if (sd) {
+                const start = new Date(sd);
+                const startY = start.getFullYear();
+                const startM = start.getMonth();
+                const curMonthIdx = MONTH_NAMES_FULL.indexOf(CURRENT_MONTH_NAME);
+                // Si el mes actual está habilitado, usarlo; si no, usar el mes de inicio
+                if (CURRENT_YEAR > startY || (CURRENT_YEAR === startY && curMonthIdx >= startM)) {
+                    setSelectedMonth(CURRENT_MONTH_NAME);
+                    setSelectedYear(CURRENT_YEAR);
+                } else {
+                    setSelectedMonth(MONTH_NAMES_FULL[startM]);
+                    setSelectedYear(startY);
+                }
+            }
+        } catch {
+            setFundConfigured(false);
+            setEnabledPeriods(new Set());
+        }
+    };
+
+    useEffect(() => {
+        fetchAllQuotas();
+        loadFundPeriods();
+    }, []);
 
     const existingQuota = useMemo(
         () => quotas.find(q => q.month === selectedMonth && q.year === selectedYear) ?? null,
@@ -357,6 +484,12 @@ export default function AdminQuotaScreen() {
         [quotas]
     );
 
+    // Cuotas visibles en historial (solo las habilitadas por el fondo)
+    const filteredHistoryQuotas = useMemo(() =>
+        sortedQuotas.filter(q => enabledPeriods.has(`${q.month}-${q.year}`)),
+        [sortedQuotas, enabledPeriods]
+    );
+
     return (
         <View style={styles.root}>
             <StatusBar barStyle="dark-content" backgroundColor={Colors.screen.bg} />
@@ -389,7 +522,15 @@ export default function AdminQuotaScreen() {
 
                 <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-                    {activeTab === "fondo" && <TowerFundSection />}
+                    {activeTab === "fondo" && (
+                        <TowerFundSection
+                            onFundSaved={(startDate) => {
+                                loadFundPeriods(startDate);
+                                // Cambiar a pestaña de cuota para que el admin la configure
+                                setTimeout(() => setActiveTab("cuota"), 600);
+                            }}
+                        />
+                    )}
 
                     {activeTab === "cuota" && (
                         <>
@@ -398,51 +539,82 @@ export default function AdminQuotaScreen() {
                                     <View style={[styles.cardIconWrap, { backgroundColor: "#F0F9FF", borderColor: "#BAE6FD" }]}>
                                         <Ionicons name="calendar-outline" size={18} color="#0891B2" />
                                     </View>
-                                    <View>
-                                        <Text style={styles.cardTitle}>Selecciona el período</Text>
-                                        <Text style={styles.cardSubtitle}>Toca un mes para editarlo</Text>
-                                    </View>
-                                </View>
-                                <MonthGrid selectedMonth={selectedMonth} selectedYear={selectedYear}
-                                    existingQuotas={existingQuotasList}
-                                    onSelectMonth={setSelectedMonth} onSelectYear={setSelectedYear} />
-                            </View>
-
-                            <View style={[styles.card, { borderTopWidth: 3, borderTopColor: Colors.primary.main }]}>
-                                <View style={styles.cardHeader}>
-                                    <View style={[styles.cardIconWrap, { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" }]}>
-                                        <Ionicons name="cash-outline" size={18} color={Colors.status.success} />
-                                    </View>
                                     <View style={{ flex: 1 }}>
-                                        <Text style={styles.cardTitle}>{existingQuota ? "Editar cuota" : "Nueva cuota"}</Text>
+                                        <Text style={styles.cardTitle}>Selecciona el período</Text>
                                         <Text style={styles.cardSubtitle}>
-                                            {selectedMonth} {selectedYear}
-                                            {existingQuota ? ` · Actual: ${formatCurrency(existingQuota.amount)}` : " · Sin registrar"}
+                                            {fundConfigured
+                                                ? "Solo los meses desde la fecha de inicio están habilitados"
+                                                : "Configura el fondo inicial para habilitar períodos"}
                                         </Text>
                                     </View>
-                                    {existingQuota && (
-                                        <View style={styles.existingBadge}>
-                                            <Ionicons name="checkmark-circle" size={12} color={Colors.status.success} />
-                                            <Text style={styles.existingBadgeText}>Registrada</Text>
-                                        </View>
-                                    )}
                                 </View>
-                                <InputField theme="light" label="MONTO DE LA CUOTA (MXN)" placeholder="Ej. 1500"
-                                    leftIcon="cash-outline" keyboardType="decimal-pad" maxLength={8}
-                                    value={amount}
-                                    onChangeText={t => { setAmount(t.replace(/[^0-9.]/g, "")); setAmountError(undefined); }}
-                                    error={amountError} />
-                                {saving ? (
-                                    <View style={styles.loadingRow}>
-                                        <ActivityIndicator size="small" color={Colors.primary.main} />
-                                        <Text style={styles.loadingText}>Guardando cuota...</Text>
-                                    </View>
-                                ) : (
-                                    <PrimaryButton label={existingQuota ? "Actualizar cuota" : "Registrar cuota"} onPress={handleSave} disabled={saving} />
-                                )}
+                                <MonthGrid
+                                    selectedMonth={selectedMonth}
+                                    selectedYear={selectedYear}
+                                    existingQuotas={existingQuotasList}
+                                    onSelectMonth={setSelectedMonth}
+                                    onSelectYear={setSelectedYear}
+                                    enabledPeriods={enabledPeriods}
+                                    fundConfigured={fundConfigured}
+                                />
                             </View>
 
-                            {sortedQuotas.length > 0 && (
+                            {/* Formulario de cuota — solo si el período está habilitado */}
+                            {fundConfigured && enabledPeriods.has(`${selectedMonth}-${selectedYear}`) ? (
+                                <View style={[styles.card, { borderTopWidth: 3, borderTopColor: Colors.primary.main }]}>
+                                    <View style={styles.cardHeader}>
+                                        <View style={[styles.cardIconWrap, { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" }]}>
+                                            <Ionicons name="cash-outline" size={18} color={Colors.status.success} />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.cardTitle}>{existingQuota ? "Editar cuota" : "Nueva cuota"}</Text>
+                                            <Text style={styles.cardSubtitle}>
+                                                {selectedMonth} {selectedYear}
+                                                {existingQuota ? ` · Actual: ${formatCurrency(existingQuota.amount)}` : " · Sin registrar"}
+                                            </Text>
+                                        </View>
+                                        {existingQuota && (
+                                            <View style={styles.existingBadge}>
+                                                <Ionicons name="checkmark-circle" size={12} color={Colors.status.success} />
+                                                <Text style={styles.existingBadgeText}>Registrada</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                    <InputField theme="light" label="MONTO DE LA CUOTA (MXN)" placeholder="Ej. 1500"
+                                        leftIcon="cash-outline" keyboardType="decimal-pad" maxLength={8}
+                                        value={amount}
+                                        onChangeText={t => { setAmount(t.replace(/[^0-9.]/g, "")); setAmountError(undefined); }}
+                                        error={amountError} />
+                                    {saving ? (
+                                        <View style={styles.loadingRow}>
+                                            <ActivityIndicator size="small" color={Colors.primary.main} />
+                                            <Text style={styles.loadingText}>Guardando cuota...</Text>
+                                        </View>
+                                    ) : (
+                                        <PrimaryButton label={existingQuota ? "Actualizar cuota" : "Registrar cuota"} onPress={handleSave} disabled={saving} />
+                                    )}
+                                </View>
+                            ) : fundConfigured ? (
+                                <View style={styles.blockedNote}>
+                                    <Ionicons name="lock-closed-outline" size={16} color={Colors.screen.textMuted} />
+                                    <Text style={styles.blockedNoteText}>
+                                        Este período está fuera del rango definido por la fecha de inicio del fondo.
+                                        Cambia la fecha de inicio en la pestaña "Fondo inicial" para habilitarlo.
+                                    </Text>
+                                </View>
+                            ) : (
+                                <View style={styles.blockedNote}>
+                                    <Ionicons name="warning-outline" size={16} color={Colors.status.warning} />
+                                    <Text style={[styles.blockedNoteText, { color: Colors.status.warning }]}>
+                                        Configura el fondo inicial primero para registrar cuotas.
+                                    </Text>
+                                    <TouchableOpacity onPress={() => setActiveTab("fondo")} activeOpacity={0.8}>
+                                        <Text style={styles.blockedNoteLink}>Ir al fondo →</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+
+                            {filteredHistoryQuotas.length > 0 && (
                                 <View style={styles.card}>
                                     <View style={styles.cardHeader}>
                                         <View style={[styles.cardIconWrap, { backgroundColor: Colors.secondary.soft, borderColor: "#FED7AA" }]}>
@@ -450,14 +622,17 @@ export default function AdminQuotaScreen() {
                                         </View>
                                         <View>
                                             <Text style={styles.cardTitle}>Historial</Text>
-                                            <Text style={styles.cardSubtitle}>{sortedQuotas.length} períodos registrados</Text>
+                                            <Text style={styles.cardSubtitle}>{filteredHistoryQuotas.length} períodos registrados</Text>
                                         </View>
                                     </View>
                                     <View style={styles.historyList}>
-                                        {sortedQuotas.map((q, i) => (
+                                        {filteredHistoryQuotas.map((q, i) => (
                                             <TouchableOpacity key={q.id}
-                                                style={[styles.historyRow, i < sortedQuotas.length - 1 && styles.historyRowBorder]}
-                                                onPress={() => { setSelectedMonth(q.month); setSelectedYear(q.year); }}
+                                                style={[styles.historyRow, i < filteredHistoryQuotas.length - 1 && styles.historyRowBorder]}
+                                                onPress={() => {
+                                                    setSelectedMonth(q.month);
+                                                    setSelectedYear(q.year);
+                                                }}
                                                 activeOpacity={0.7}>
                                                 <View style={styles.historyLeft}>
                                                     <Text style={styles.historyPeriod}>{q.month} {q.year}</Text>
@@ -482,7 +657,7 @@ export default function AdminQuotaScreen() {
     );
 }
 
-// ─── Estilos ──────────────────────────────────────────────────────────────────
+// ── Estilos ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
@@ -533,6 +708,19 @@ const styles = StyleSheet.create({
         flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14,
     },
     loadingText: { fontFamily: "Outfit_500Medium", fontSize: 14, color: Colors.primary.main },
+    blockedNote: {
+        flexDirection: "row", alignItems: "flex-start", gap: 10,
+        backgroundColor: Colors.neutral[100], borderRadius: 12,
+        borderWidth: 1, borderColor: Colors.screen.border,
+        paddingHorizontal: 14, paddingVertical: 12,
+    },
+    blockedNoteText: {
+        flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12,
+        color: Colors.screen.textMuted, lineHeight: 18,
+    },
+    blockedNoteLink: {
+        fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.primary.dark, marginTop: 6,
+    },
     historyList: { gap: 0 },
     historyRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
     historyRowBorder: { borderBottomWidth: 1, borderBottomColor: Colors.screen.border },
@@ -592,7 +780,7 @@ const fundSec = StyleSheet.create({
         borderWidth: 1.5, borderColor: Colors.primary.muted, backgroundColor: Colors.primary.soft,
     },
     dateTriggerText: { flex: 1, fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.primary.dark },
-    dateHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
+    dateHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, lineHeight: 16 },
     loadingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14 },
     loadingText: { fontFamily: "Outfit_500Medium", fontSize: 14, color: "#7C3AED" },
     saveBtn: {
@@ -605,6 +793,16 @@ const fundSec = StyleSheet.create({
 });
 
 const grid = StyleSheet.create({
+    noFundNote: {
+        flexDirection: "row", alignItems: "flex-start", gap: 8,
+        backgroundColor: Colors.status.warningBg, borderRadius: 10,
+        borderWidth: 1, borderColor: Colors.status.warningBorder,
+        paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12,
+    },
+    noFundNoteText: {
+        flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12,
+        color: Colors.status.warning, lineHeight: 17,
+    },
     yearRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
     yearBtn: {
         flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: "center",
@@ -620,11 +818,17 @@ const grid = StyleSheet.create({
     },
     monthBtnActive: { backgroundColor: "#0891B2", borderColor: "#0891B2" },
     monthBtnHasQuota: { backgroundColor: Colors.primary.soft, borderColor: Colors.primary.muted },
+    monthBtnDisabled: { backgroundColor: Colors.neutral[50], borderColor: Colors.screen.border, opacity: 0.45 },
     monthText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.screen.textSecondary },
     monthTextActive: { fontFamily: "Outfit_700Bold", color: "#fff" },
     monthTextHasQuota: { fontFamily: "Outfit_600SemiBold", color: Colors.primary.dark },
+    monthTextDisabled: { color: Colors.screen.textMuted },
     currentDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.secondary.main },
     quotaAmount: { fontFamily: "Outfit_500Medium", fontSize: 9, color: Colors.primary.dark, textAlign: "center" },
+    legendRow: { flexDirection: "row", gap: 12, marginTop: 10, justifyContent: "flex-end" },
+    legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+    legendDot: { width: 10, height: 10, borderRadius: 3 },
+    legendText: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.screen.textMuted },
 });
 
 const dpk = StyleSheet.create({

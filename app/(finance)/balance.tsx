@@ -1,7 +1,7 @@
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
 import { useBalance } from "@/hooks/useBalance";
-import { MONTHS } from "@/hooks/useRecipes";
+import supabase from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
@@ -17,7 +17,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// Helpers
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function formatCurrency(n: number) {
     return `$${Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
@@ -29,7 +30,40 @@ const MONTH_NAMES = [
 ];
 const CURRENT_MONTH = MONTH_NAMES[new Date().getMonth()];
 
-// Stat Card
+interface AvailablePeriod {
+    month: string;
+    year: number;
+    key: string;
+}
+
+/**
+ * Genera la lista de períodos disponibles (mes/año) desde startDate hasta hoy (desc).
+ * Si startDate es null, solo devuelve el mes actual.
+ */
+function buildAvailablePeriods(startDate: string | null): AvailablePeriod[] {
+    const now = new Date();
+    const result: AvailablePeriod[] = [];
+
+    const startFrom = startDate ? new Date(startDate) : now;
+    const startYear = startFrom.getFullYear();
+    const startMonth = startFrom.getMonth(); // 0-indexed
+
+    let y = now.getFullYear();
+    let m = now.getMonth(); // 0-indexed
+
+    while (y > startYear || (y === startYear && m >= startMonth)) {
+        const monthName = MONTH_NAMES[m];
+        result.push({ month: monthName, year: y, key: `${monthName}-${y}` });
+        m--;
+        if (m < 0) { m = 11; y--; }
+        if (result.length >= 60) break;
+    }
+
+    return result;
+}
+
+// ── Stat Card ─────────────────────────────────────────────────────────────────
+
 function StatCard({
     icon, label, value, color, bg, border, note,
 }: {
@@ -55,78 +89,146 @@ function StatCard({
     );
 }
 
-// Period Picker Modal
+// ── Period Picker Modal ───────────────────────────────────────────────────────
+
 function PeriodPickerModal({
     visible,
-    selectedMonth,
-    selectedYear,
+    availablePeriods,
+    selectedKey,
     onSelect,
     onClose,
+    fundLoading,
 }: {
     visible: boolean;
-    selectedMonth: string;
-    selectedYear: number;
+    availablePeriods: AvailablePeriod[];
+    selectedKey: string;
     onSelect: (month: string, year: number) => void;
     onClose: () => void;
+    fundLoading: boolean;
 }) {
-    const [year, setYear] = useState(selectedYear);
-    const YEARS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1];
+    const [draftKey, setDraftKey] = useState(selectedKey);
+
+    useEffect(() => {
+        if (visible) setDraftKey(selectedKey);
+    }, [visible, selectedKey]);
+
+    // Agrupar por año para mostrar separadores
+    const byYear: Record<number, AvailablePeriod[]> = {};
+    for (const p of availablePeriods) {
+        if (!byYear[p.year]) byYear[p.year] = [];
+        byYear[p.year].push(p);
+    }
+    const years = Object.keys(byYear).map(Number).sort((a, b) => b - a);
+
+    const handleApply = () => {
+        const found = availablePeriods.find(p => p.key === draftKey);
+        if (found) {
+            onSelect(found.month, found.year);
+            onClose();
+        }
+    };
 
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
             <View style={pm.overlay}>
                 <View style={pm.sheet}>
                     <View style={pm.handle} />
-                    <Text style={pm.title}>Seleccionar período</Text>
-
-                    <View style={pm.yearRow}>
-                        {YEARS.map(y => (
-                            <TouchableOpacity
-                                key={y}
-                                style={[pm.yearBtn, year === y && pm.yearBtnActive]}
-                                onPress={() => setYear(y)}
-                                activeOpacity={0.8}
-                            >
-                                <Text style={[pm.yearBtnText, year === y && pm.yearBtnTextActive]}>{y}</Text>
-                            </TouchableOpacity>
-                        ))}
+                    <View style={pm.sheetHeader}>
+                        <View>
+                            <Text style={pm.title}>Seleccionar período</Text>
+                            <Text style={pm.subtitle}>
+                                {fundLoading
+                                    ? "Cargando períodos disponibles..."
+                                    : availablePeriods.length > 0
+                                        ? `${availablePeriods.length} períodos disponibles`
+                                        : "Configura el fondo inicial para habilitar filtros"}
+                            </Text>
+                        </View>
+                        <TouchableOpacity style={pm.closeBtn} onPress={onClose} activeOpacity={0.7}>
+                            <Ionicons name="close" size={16} color={Colors.screen.textSecondary} />
+                        </TouchableOpacity>
                     </View>
 
-                    <View style={pm.monthGrid}>
-                        {MONTHS.map(m => {
-                            const isSelected = selectedMonth === m.value && selectedYear === year;
-                            return (
-                                <TouchableOpacity
-                                    key={m.value}
-                                    style={[pm.monthBtn, isSelected && pm.monthBtnActive]}
-                                    onPress={() => { onSelect(m.value, year); onClose(); }}
-                                    activeOpacity={0.8}
-                                >
-                                    <Text style={[pm.monthBtnText, isSelected && pm.monthBtnTextActive]}>
-                                        {m.label.slice(0, 3)}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
+                    {fundLoading ? (
+                        <View style={pm.loadingWrap}>
+                            <ActivityIndicator size="small" color={Colors.primary.main} />
+                            <Text style={pm.loadingText}>Cargando...</Text>
+                        </View>
+                    ) : availablePeriods.length === 0 ? (
+                        <View style={pm.emptyNote}>
+                            <Ionicons name="warning-outline" size={16} color={Colors.status.warning} />
+                            <Text style={pm.emptyNoteText}>
+                                No hay períodos disponibles. Configura el fondo inicial en "Configuración financiera" para definir la fecha de inicio.
+                            </Text>
+                        </View>
+                    ) : (
+                        <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+                            {years.map(year => (
+                                <View key={year}>
+                                    {/* Separador de año */}
+                                    <View style={pm.yearSeparator}>
+                                        <Text style={pm.yearSeparatorText}>{year}</Text>
+                                        <View style={pm.yearSeparatorLine} />
+                                    </View>
+                                    {/* Grid de meses del año */}
+                                    <View style={pm.monthGrid}>
+                                        {byYear[year].map(p => {
+                                            const isSelected = p.key === draftKey;
+                                            const isCurrent = p.month === CURRENT_MONTH && p.year === CURRENT_YEAR;
+                                            return (
+                                                <TouchableOpacity
+                                                    key={p.key}
+                                                    style={[
+                                                        pm.monthBtn,
+                                                        isSelected && pm.monthBtnActive,
+                                                        isCurrent && !isSelected && pm.monthBtnCurrent,
+                                                    ]}
+                                                    onPress={() => setDraftKey(p.key)}
+                                                    activeOpacity={0.8}
+                                                >
+                                                    <Text style={[
+                                                        pm.monthBtnText,
+                                                        isSelected && pm.monthBtnTextActive,
+                                                        isCurrent && !isSelected && { color: Colors.primary.dark },
+                                                    ]}>
+                                                        {p.month.slice(0, 3)}
+                                                    </Text>
+                                                    {isCurrent && !isSelected && (
+                                                        <View style={pm.currentDot} />
+                                                    )}
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                </View>
+                            ))}
+                        </ScrollView>
+                    )}
 
-                    <TouchableOpacity style={pm.cancelBtn} onPress={onClose}>
-                        <Text style={pm.cancelText}>Cancelar</Text>
-                    </TouchableOpacity>
+                    <View style={pm.actions}>
+                        <TouchableOpacity style={pm.cancelBtn} onPress={onClose} activeOpacity={0.8}>
+                            <Text style={pm.cancelText}>Cancelar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[pm.applyBtn, (availablePeriods.length === 0 || fundLoading) && { opacity: 0.5 }]}
+                            onPress={handleApply}
+                            disabled={availablePeriods.length === 0 || fundLoading}
+                            activeOpacity={0.8}
+                        >
+                            <Ionicons name="checkmark" size={16} color="#fff" />
+                            <Text style={pm.applyText}>Aplicar</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </View>
         </Modal>
     );
 }
 
-// Balance Bar
+// ── Balance Bar ───────────────────────────────────────────────────────────────
 
-function BalanceBar({
-    income, expenses, expected,
-}: {
-    income: number;
-    expenses: number;
-    expected: number;
+function BalanceBar({ income, expenses, expected }: {
+    income: number; expenses: number; expected: number;
 }) {
     const max = Math.max(expected, income + expenses, 1);
     const incomeWidth = Math.min((income / max) * 100, 100);
@@ -160,7 +262,7 @@ function BalanceBar({
     );
 }
 
-// Main Screen
+// ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function BalanceScreen() {
     const { user } = useSession();
@@ -170,6 +272,44 @@ export default function BalanceScreen() {
     const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
     const [showPicker, setShowPicker] = useState(false);
 
+    // Períodos disponibles según la fecha de inicio del fondo
+    const [availablePeriods, setAvailablePeriods] = useState<AvailablePeriod[]>([]);
+    const [fundLoading, setFundLoading] = useState(true);
+
+    // Cargar fecha de inicio del fondo para restringir el filtro
+    useEffect(() => {
+        const loadFund = async () => {
+            setFundLoading(true);
+            try {
+                const { data } = await supabase
+                    .from("tower_fund")
+                    .select("updated_at")
+                    .order("id", { ascending: true })
+                    .limit(1)
+                    .maybeSingle();
+
+                const periods = buildAvailablePeriods(data?.updated_at ?? null);
+                setAvailablePeriods(periods);
+
+                // Si el mes/año seleccionado no está en la lista, forzar al más reciente disponible
+                if (periods.length > 0) {
+                    const currentKey = `${CURRENT_MONTH}-${CURRENT_YEAR}`;
+                    const found = periods.find(p => p.key === currentKey);
+                    if (!found) {
+                        setSelectedMonth(periods[0].month);
+                        setSelectedYear(periods[0].year);
+                    }
+                }
+            } catch {
+                // Sin fondo configurado: sin restricción (solo mes actual)
+                setAvailablePeriods([{ month: CURRENT_MONTH, year: CURRENT_YEAR, key: `${CURRENT_MONTH}-${CURRENT_YEAR}` }]);
+            } finally {
+                setFundLoading(false);
+            }
+        };
+        loadFund();
+    }, []);
+
     useEffect(() => {
         loadBalance();
     }, [selectedMonth, selectedYear]);
@@ -178,6 +318,7 @@ export default function BalanceScreen() {
         fetchBalance({ month: selectedMonth, year: selectedYear });
     };
 
+    const selectedKey = `${selectedMonth}-${selectedYear}`;
     const isDeficit = (balance?.monthlyDeficit ?? 0) > 0;
     const coveragePercent = balance && balance.monthlyExpected > 0
         ? Math.min(Math.round((balance.monthlyIncome / balance.monthlyExpected) * 100), 100)
@@ -202,15 +343,37 @@ export default function BalanceScreen() {
                         <Text style={styles.headerSubtitle}>Balance general del condominio</Text>
                     </View>
                     <TouchableOpacity
-                        style={styles.periodBtn}
+                        style={[styles.periodBtn, fundLoading && { opacity: 0.6 }]}
                         onPress={() => setShowPicker(true)}
                         activeOpacity={0.8}
+                        disabled={fundLoading}
                     >
-                        <Ionicons name="calendar-outline" size={14} color={Colors.primary.dark} />
-                        <Text style={styles.periodBtnText}>{selectedMonth.slice(0, 3)} {selectedYear}</Text>
-                        <Ionicons name="chevron-down" size={12} color={Colors.primary.dark} />
+                        {fundLoading ? (
+                            <ActivityIndicator size="small" color={Colors.primary.dark} />
+                        ) : (
+                            <>
+                                <Ionicons name="calendar-outline" size={14} color={Colors.primary.dark} />
+                                <Text style={styles.periodBtnText}>
+                                    {selectedMonth.slice(0, 3)} {selectedYear}
+                                </Text>
+                                <Ionicons name="chevron-down" size={12} color={Colors.primary.dark} />
+                            </>
+                        )}
                     </TouchableOpacity>
                 </View>
+
+                {/* Banner si no hay fondo configurado */}
+                {!fundLoading && availablePeriods.length === 0 && (
+                    <View style={styles.noFundBanner}>
+                        <Ionicons name="warning-outline" size={15} color={Colors.status.warning} />
+                        <Text style={styles.noFundText}>
+                            Configura el fondo inicial para habilitar el filtro de períodos.
+                        </Text>
+                        <TouchableOpacity onPress={() => router.push("/(finance)/admin-quota" as any)} activeOpacity={0.8}>
+                            <Text style={styles.noFundLink}>Ir →</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
 
                 {isLoading ? (
                     <View style={styles.centered}>
@@ -295,7 +458,7 @@ export default function BalanceScreen() {
                             />
                         </View>
 
-                        {/* BALANCE MENSUAL  */}
+                        {/* BALANCE MENSUAL */}
                         <View style={styles.sectionHeader}>
                             <Text style={styles.sectionTitle}>MES: {selectedMonth.toUpperCase()} {selectedYear}</Text>
                             <View style={styles.sectionLine} />
@@ -392,7 +555,7 @@ export default function BalanceScreen() {
                             <View style={styles.noQuotaNote}>
                                 <Ionicons name="information-circle-outline" size={14} color={Colors.screen.textMuted} />
                                 <Text style={styles.noQuotaText}>
-                                    No hay cuota configurada para este mes. Ve a "Cuota mensual" para registrarla.
+                                    No hay cuota configurada para este mes. Ve a "Configuración financiera" para registrarla.
                                 </Text>
                             </View>
                         )}
@@ -403,17 +566,20 @@ export default function BalanceScreen() {
             {/* Period Picker Modal */}
             <PeriodPickerModal
                 visible={showPicker}
-                selectedMonth={selectedMonth}
-                selectedYear={selectedYear}
+                availablePeriods={availablePeriods}
+                selectedKey={selectedKey}
                 onSelect={(month, year) => {
                     setSelectedMonth(month);
                     setSelectedYear(year);
                 }}
                 onClose={() => setShowPicker(false)}
+                fundLoading={fundLoading}
             />
         </View>
     );
 }
+
+// ── Estilos ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
@@ -434,8 +600,16 @@ const styles = StyleSheet.create({
         flexDirection: "row", alignItems: "center", gap: 5,
         paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10,
         backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
+        minWidth: 80, justifyContent: "center",
     },
     periodBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.dark },
+    noFundBanner: {
+        flexDirection: "row", alignItems: "center", gap: 8,
+        backgroundColor: Colors.status.warningBg, borderBottomWidth: 1, borderBottomColor: Colors.status.warningBorder,
+        paddingHorizontal: 16, paddingVertical: 10,
+    },
+    noFundText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.status.warning },
+    noFundLink: { fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.status.warning },
     scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40, gap: 12 },
     centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
     stateText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: Colors.screen.textMuted, textAlign: "center" },
@@ -515,6 +689,7 @@ const styles = StyleSheet.create({
         color: Colors.screen.textMuted, lineHeight: 17,
     },
 });
+
 const sc = StyleSheet.create({
     root: {
         flexDirection: "row", alignItems: "center", gap: 12,
@@ -528,6 +703,7 @@ const sc = StyleSheet.create({
     value: { fontFamily: "Outfit_700Bold", fontSize: 16 },
     note: { fontFamily: "Outfit_400Regular", fontSize: 10, color: Colors.screen.textMuted, marginTop: 2 },
 });
+
 const bar = StyleSheet.create({
     root: { gap: 10 },
     row: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -539,39 +715,75 @@ const bar = StyleSheet.create({
     fill: { height: "100%", borderRadius: 4 },
     value: { fontFamily: "Outfit_700Bold", fontSize: 11, width: 80, textAlign: "right" },
 });
+
 const pm = StyleSheet.create({
     overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" },
     sheet: {
         backgroundColor: Colors.screen.card,
         borderTopLeftRadius: 24, borderTopRightRadius: 24,
-        paddingHorizontal: 20, paddingBottom: 36,
+        paddingHorizontal: 20, paddingBottom: 36, paddingTop: 0,
         borderTopWidth: 1, borderTopColor: Colors.screen.border,
+        gap: 16,
     },
     handle: {
         width: 36, height: 4, borderRadius: 2,
         backgroundColor: Colors.screen.border, alignSelf: "center",
-        marginTop: 12, marginBottom: 16,
+        marginTop: 12,
     },
-    title: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary, marginBottom: 16 },
-    yearRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
-    yearBtn: {
-        flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center",
-        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
+    sheetHeader: {
+        flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between",
     },
-    yearBtnActive: { backgroundColor: Colors.primary.main, borderColor: Colors.primary.main },
-    yearBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
-    yearBtnTextActive: { color: "#fff" },
-    monthGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 },
+    title: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary },
+    subtitle: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
+    closeBtn: {
+        width: 30, height: 30, borderRadius: 9,
+        backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
+        alignItems: "center", justifyContent: "center",
+    },
+    loadingWrap: {
+        flexDirection: "row", alignItems: "center", justifyContent: "center",
+        gap: 10, paddingVertical: 24,
+    },
+    loadingText: { fontFamily: "Outfit_400Regular", fontSize: 13, color: Colors.screen.textMuted },
+    emptyNote: {
+        flexDirection: "row", alignItems: "flex-start", gap: 8,
+        backgroundColor: Colors.status.warningBg, borderRadius: 10,
+        borderWidth: 1, borderColor: Colors.status.warningBorder, padding: 12,
+    },
+    emptyNoteText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.status.warning, lineHeight: 18 },
+    yearSeparator: {
+        flexDirection: "row", alignItems: "center", gap: 8,
+        marginBottom: 8, marginTop: 4,
+    },
+    yearSeparatorText: {
+        fontFamily: "Outfit_700Bold", fontSize: 12,
+        color: Colors.screen.textSecondary, letterSpacing: 0.5,
+    },
+    yearSeparatorLine: { flex: 1, height: 1, backgroundColor: Colors.screen.border },
+    monthGrid: {
+        flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12,
+    },
     monthBtn: {
-        width: "22%", paddingVertical: 12, alignItems: "center", borderRadius: 10,
-        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
+        width: "22%", paddingVertical: 10, alignItems: "center", borderRadius: 10,
+        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border, gap: 3,
     },
     monthBtnActive: { backgroundColor: Colors.primary.main, borderColor: Colors.primary.main },
-    monthBtnText: { fontFamily: "Outfit_500Medium", fontSize: 13, color: Colors.screen.textSecondary },
+    monthBtnCurrent: { borderColor: Colors.primary.muted, backgroundColor: Colors.primary.soft },
+    monthBtnText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.screen.textSecondary },
     monthBtnTextActive: { fontFamily: "Outfit_700Bold", color: "#fff" },
+    currentDot: {
+        width: 5, height: 5, borderRadius: 3,
+        backgroundColor: Colors.primary.main,
+    },
+    actions: { flexDirection: "row", gap: 10 },
     cancelBtn: {
-        paddingVertical: 13, borderRadius: 12, alignItems: "center",
+        flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: "center",
         backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
     },
     cancelText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
+    applyBtn: {
+        flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center",
+        gap: 8, paddingVertical: 13, borderRadius: 12, backgroundColor: Colors.primary.main,
+    },
+    applyText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: "#fff" },
 });

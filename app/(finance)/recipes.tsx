@@ -4,6 +4,7 @@ import { useSession } from "@/context/AuthContext";
 import { useMonthlyQuota } from "@/hooks/useMonthlyQuota";
 import { getCurrentMonthName, getCurrentYear, useRecipes, type Recipe } from "@/hooks/useRecipes";
 import { uploadFile } from "@/lib/cloudinary";
+import supabase from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
@@ -31,6 +32,22 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const CURRENT_MONTH = getCurrentMonthName();
 const CURRENT_YEAR = getCurrentYear();
 
+const MONTH_NAMES_ALL = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface AttachedFile { uri: string; name: string; type: "image" | "pdf"; }
+
+interface AvailablePeriod {
+    month: string;
+    monthIdx: number;
+    year: number;
+    key: string;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getValidationStyle(validated: boolean | null) {
@@ -45,7 +62,139 @@ function formatCurrency(n: number) {
     return `$${Number(n).toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-interface AttachedFile { uri: string; name: string; type: "image" | "pdf"; }
+/**
+ * Genera la lista de períodos disponibles desde startDate hasta hoy (desc).
+ * Si startDate es null, solo el mes actual.
+ */
+function buildAvailablePeriods(startDate: string | null): AvailablePeriod[] {
+    const now = new Date();
+    const result: AvailablePeriod[] = [];
+
+    const startFrom = startDate ? new Date(startDate) : now;
+    const startYear = startFrom.getFullYear();
+    const startMonthIdx = startFrom.getMonth();
+
+    let y = now.getFullYear();
+    let m = now.getMonth();
+
+    while (y > startYear || (y === startYear && m >= startMonthIdx)) {
+        result.push({
+            month: MONTH_NAMES_ALL[m],
+            monthIdx: m,
+            year: y,
+            key: `${MONTH_NAMES_ALL[m]}-${y}`,
+        });
+        m--;
+        if (m < 0) { m = 11; y--; }
+        if (result.length >= 60) break;
+    }
+
+    return result; // orden desc (más reciente primero)
+}
+
+// ── Period Picker Modal ───────────────────────────────────────────────────────
+
+function PeriodPickerModal({
+    visible, availablePeriods, selectedKey, onSelect, onClose,
+}: {
+    visible: boolean;
+    availablePeriods: AvailablePeriod[];
+    selectedKey: string;
+    onSelect: (period: AvailablePeriod) => void;
+    onClose: () => void;
+}) {
+    const [draftKey, setDraftKey] = useState(selectedKey);
+
+    useEffect(() => {
+        if (visible) setDraftKey(selectedKey);
+    }, [visible, selectedKey]);
+
+    // Agrupar por año
+    const byYear: Record<number, AvailablePeriod[]> = {};
+    for (const p of availablePeriods) {
+        if (!byYear[p.year]) byYear[p.year] = [];
+        byYear[p.year].push(p);
+    }
+    const years = Object.keys(byYear).map(Number).sort((a, b) => b - a);
+
+    const handleApply = () => {
+        const found = availablePeriods.find(p => p.key === draftKey);
+        if (found) { onSelect(found); onClose(); }
+    };
+
+    return (
+        <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+            <View style={periodPicker.overlay}>
+                <View style={periodPicker.sheet}>
+                    <View style={periodPicker.handle} />
+                    <View style={periodPicker.sheetHeader}>
+                        <View>
+                            <Text style={periodPicker.title}>Seleccionar mes</Text>
+                            <Text style={periodPicker.subtitle}>
+                                {availablePeriods.length > 1
+                                    ? `${availablePeriods.length} meses disponibles`
+                                    : "Solo el mes actual"}
+                            </Text>
+                        </View>
+                        <TouchableOpacity style={periodPicker.closeBtn} onPress={onClose} activeOpacity={0.7}>
+                            <Ionicons name="close" size={16} color={Colors.screen.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+                        {years.map(year => (
+                            <View key={year}>
+                                <View style={periodPicker.yearSeparator}>
+                                    <Text style={periodPicker.yearSeparatorText}>{year}</Text>
+                                    <View style={periodPicker.yearSeparatorLine} />
+                                </View>
+                                <View style={periodPicker.monthGrid}>
+                                    {byYear[year].map(p => {
+                                        const isSelected = p.key === draftKey;
+                                        const isCurrent = p.month === CURRENT_MONTH && p.year === CURRENT_YEAR;
+                                        return (
+                                            <TouchableOpacity
+                                                key={p.key}
+                                                style={[
+                                                    periodPicker.monthBtn,
+                                                    isSelected && periodPicker.monthBtnActive,
+                                                    isCurrent && !isSelected && periodPicker.monthBtnCurrent,
+                                                ]}
+                                                onPress={() => setDraftKey(p.key)}
+                                                activeOpacity={0.8}
+                                            >
+                                                <Text style={[
+                                                    periodPicker.monthBtnText,
+                                                    isSelected && periodPicker.monthBtnTextActive,
+                                                    isCurrent && !isSelected && { color: Colors.primary.dark, fontFamily: "Outfit_600SemiBold" },
+                                                ]}>
+                                                    {p.month.slice(0, 3)}
+                                                </Text>
+                                                {isCurrent && !isSelected && (
+                                                    <View style={periodPicker.currentDot} />
+                                                )}
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                            </View>
+                        ))}
+                    </ScrollView>
+
+                    <View style={periodPicker.actions}>
+                        <TouchableOpacity style={periodPicker.cancelBtn} onPress={onClose} activeOpacity={0.8}>
+                            <Text style={periodPicker.cancelText}>Cancelar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={periodPicker.applyBtn} onPress={handleApply} activeOpacity={0.8}>
+                            <Ionicons name="checkmark" size={16} color="#fff" />
+                            <Text style={periodPicker.applyText}>Confirmar</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
+}
 
 // ── Image Viewer ──────────────────────────────────────────────────────────────
 
@@ -159,7 +308,6 @@ function ReceiptCard({
                     </View>
                 )}
 
-                {/* Nota si fue rechazado */}
                 {item.validated === false && (
                     <View style={card.rejectedNote}>
                         <Ionicons name="alert-circle-outline" size={14} color={Colors.status.error} />
@@ -169,7 +317,6 @@ function ReceiptCard({
                     </View>
                 )}
 
-                {/* Eliminar */}
                 {onDelete && item.validated !== true && (
                     <TouchableOpacity style={card.deleteBtn} onPress={() => onDelete(item.id)} activeOpacity={0.7}>
                         <Ionicons name="trash-outline" size={13} color={Colors.screen.textMuted} />
@@ -184,12 +331,10 @@ function ReceiptCard({
 // ── Upload Form ───────────────────────────────────────────────────────────────
 
 function UploadForm({
-    depId,
-    amountExpected,
-    onSuccess,
+    depId, amountExpected, selectedMonth, selectedYear, onSuccess,
 }: {
-    depId: number;
-    amountExpected: number;
+    depId: number; amountExpected: number;
+    selectedMonth: string; selectedYear: number;
     onSuccess: () => void;
 }) {
     const { createRecipe, isLoading } = useRecipes();
@@ -199,10 +344,17 @@ function UploadForm({
     const [fileError, setFileError] = useState<string | undefined>();
     const [uploading, setUploading] = useState(false);
 
-    // Actualizar monto si cambia la cuota esperada
     useEffect(() => {
         if (amountExpected > 0 && !amount) setAmount(String(amountExpected));
     }, [amountExpected]);
+
+    // Reiniciar al cambiar mes
+    useEffect(() => {
+        setAmount(amountExpected > 0 ? String(amountExpected) : "");
+        setFile(null);
+        setAmountError(undefined);
+        setFileError(undefined);
+    }, [selectedMonth, selectedYear]);
 
     const pickImage = async () => {
         const p = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -272,8 +424,8 @@ function UploadForm({
         const parsedAmount = parseFloat(amount.replace(/,/g, ""));
         const ok = await createRecipe({
             dep_id: depId,
-            year: CURRENT_YEAR,
-            month: CURRENT_MONTH,
+            year: selectedYear,
+            month: selectedMonth,
             amount_paid: parsedAmount,
             amount_expected: amountExpected > 0 ? amountExpected : parsedAmount,
             url_image: fileUrl,
@@ -288,6 +440,8 @@ function UploadForm({
         }
     };
 
+    const isPastMonth = selectedMonth !== CURRENT_MONTH || selectedYear !== CURRENT_YEAR;
+
     return (
         <View style={form.root}>
             <View style={form.header}>
@@ -296,8 +450,14 @@ function UploadForm({
                 </View>
                 <View style={{ flex: 1 }}>
                     <Text style={form.headerTitle}>Subir comprobante</Text>
-                    <Text style={form.headerSubtitle}>{CURRENT_MONTH} {CURRENT_YEAR}</Text>
+                    <Text style={form.headerSubtitle}>{selectedMonth} {selectedYear}</Text>
                 </View>
+                {isPastMonth && (
+                    <View style={form.pastBadge}>
+                        <Ionicons name="time-outline" size={11} color={Colors.status.warning} />
+                        <Text style={form.pastBadgeText}>Mes pasado</Text>
+                    </View>
+                )}
             </View>
 
             {/* Cuota esperada */}
@@ -399,7 +559,7 @@ function UploadForm({
 
 export default function RecipesScreen() {
     const { user } = useSession();
-    const { recipes, isLoading, error, fetchMyCurrentMonthRecipes, deleteRecipe } = useRecipes();
+    const { recipes, isLoading, error, fetchMyRecipesByPeriod, deleteRecipe } = useRecipes();
     const { fetchQuota } = useMonthlyQuota();
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [showForm, setShowForm] = useState(false);
@@ -407,22 +567,62 @@ export default function RecipesScreen() {
     const [loadingQuota, setLoadingQuota] = useState(true);
     const formAnim = useRef(new Animated.Value(0)).current;
 
+    // Período seleccionado
+    const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH);
+    const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
+    const [showPeriodPicker, setShowPeriodPicker] = useState(false);
+
+    // Períodos disponibles (desde fecha de inicio del fondo)
+    const [availablePeriods, setAvailablePeriods] = useState<AvailablePeriod[]>([]);
+    const [fundLoading, setFundLoading] = useState(true);
+
     const depId = user?.dep_id;
 
+    // Cargar fondo para construir lista de períodos disponibles
     useEffect(() => {
-        if (depId) {
-            fetchMyCurrentMonthRecipes(depId);
-            // Cargar cuota del mes actual
-            setLoadingQuota(true);
-            fetchQuota(CURRENT_MONTH, CURRENT_YEAR).then(q => {
-                setAmountExpected(q ? Number(q.amount) : 0);
-                setLoadingQuota(false);
-            });
-        }
-    }, [depId]);
+        const loadFund = async () => {
+            setFundLoading(true);
+            try {
+                const { data } = await supabase
+                    .from("tower_fund")
+                    .select("updated_at")
+                    .order("id", { ascending: true })
+                    .limit(1)
+                    .maybeSingle();
+
+                const periods = buildAvailablePeriods(data?.updated_at ?? null);
+                setAvailablePeriods(periods);
+            } catch {
+                // Sin fondo: solo mes actual
+                setAvailablePeriods([{
+                    month: CURRENT_MONTH,
+                    monthIdx: new Date().getMonth(),
+                    year: CURRENT_YEAR,
+                    key: `${CURRENT_MONTH}-${CURRENT_YEAR}`,
+                }]);
+            } finally {
+                setFundLoading(false);
+            }
+        };
+        loadFund();
+    }, []);
+
+    // Cargar comprobantes y cuota al cambiar de período
+    useEffect(() => {
+        if (!depId) return;
+        fetchMyRecipesByPeriod(depId, selectedMonth, selectedYear);
+        setLoadingQuota(true);
+        fetchQuota(selectedMonth, selectedYear).then(q => {
+            setAmountExpected(q ? Number(q.amount) : 0);
+            setLoadingQuota(false);
+        });
+        // Cerrar formulario al cambiar período
+        setShowForm(false);
+        formAnim.setValue(0);
+    }, [depId, selectedMonth, selectedYear]);
 
     const refresh = () => {
-        if (depId) fetchMyCurrentMonthRecipes(depId);
+        if (depId) fetchMyRecipesByPeriod(depId, selectedMonth, selectedYear);
     };
 
     const toggleForm = () => {
@@ -454,18 +654,16 @@ export default function RecipesScreen() {
         ]);
     };
 
-    // Estado del mes actual
     const approvedRecipe = recipes.find(r => r.validated === true);
-    const pendingRecipe = recipes.find(r => r.validated === null || r.validated === undefined);
     const rejectedRecipes = recipes.filter(r => r.validated === false);
     const hasApproved = !!approvedRecipe;
     const totalPaid = recipes.filter(r => r.validated === true).reduce((s, r) => s + r.amount_paid, 0);
     const isComplete = amountExpected > 0 && totalPaid >= amountExpected;
-
-    // Puede subir: si no hay aprobado que cubra el monto, o si hay rechazo
     const canUpload = !hasApproved || (amountExpected > 0 && totalPaid < amountExpected);
-    // No mostrar botón de subir si ya está todo aprobado y cubierto
     const showUploadBtn = canUpload || rejectedRecipes.length > 0;
+
+    const isPastMonth = selectedMonth !== CURRENT_MONTH || selectedYear !== CURRENT_YEAR;
+    const hasMultiplePeriods = availablePeriods.length > 1;
 
     return (
         <View style={styles.root}>
@@ -480,22 +678,38 @@ export default function RecipesScreen() {
                         </TouchableOpacity>
                         <View>
                             <Text style={styles.headerTitle}>Mis cuotas</Text>
-                            <Text style={styles.headerSubtitle}>{CURRENT_MONTH} {CURRENT_YEAR}</Text>
+                            <Text style={styles.headerSubtitle}>{selectedMonth} {selectedYear}</Text>
                         </View>
                     </View>
-                    {showUploadBtn && !isComplete && (
-                        <TouchableOpacity
-                            style={[styles.uploadBtn, showForm && styles.uploadBtnCancel]}
-                            onPress={toggleForm}
-                            activeOpacity={0.8}
-                        >
-                            <Ionicons name={showForm ? "close" : "add"} size={18}
-                                color={showForm ? Colors.status.error : Colors.primary.dark} />
-                            <Text style={[styles.uploadBtnText, showForm && { color: Colors.status.error }]}>
-                                {showForm ? "Cancelar" : "Subir"}
-                            </Text>
-                        </TouchableOpacity>
-                    )}
+                    <View style={styles.headerRight}>
+                        {/* Selector de período */}
+                        {hasMultiplePeriods && !fundLoading && (
+                            <TouchableOpacity
+                                style={styles.periodBtn}
+                                onPress={() => setShowPeriodPicker(true)}
+                                activeOpacity={0.8}
+                            >
+                                <Ionicons name="calendar-outline" size={13} color={Colors.primary.dark} />
+                                <Text style={styles.periodBtnText}>
+                                    {isPastMonth ? `${selectedMonth.slice(0, 3)} ${selectedYear}` : "Este mes"}
+                                </Text>
+                                <Ionicons name="chevron-down" size={11} color={Colors.primary.dark} />
+                            </TouchableOpacity>
+                        )}
+                        {showUploadBtn && !isComplete && (
+                            <TouchableOpacity
+                                style={[styles.uploadBtn, showForm && styles.uploadBtnCancel]}
+                                onPress={toggleForm}
+                                activeOpacity={0.8}
+                            >
+                                <Ionicons name={showForm ? "close" : "add"} size={18}
+                                    color={showForm ? Colors.status.error : Colors.primary.dark} />
+                                <Text style={[styles.uploadBtnText, showForm && { color: Colors.status.error }]}>
+                                    {showForm ? "Cancelar" : "Subir"}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
                 </View>
 
                 <ScrollView
@@ -503,7 +717,7 @@ export default function RecipesScreen() {
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {/* ── Banner: mes cubierto ──────────────────────────────── */}
+                    {/* Banner: mes cubierto */}
                     {isComplete && !showForm && (
                         <View style={styles.successBanner}>
                             <View style={styles.successBannerIconWrap}>
@@ -512,27 +726,40 @@ export default function RecipesScreen() {
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.successBannerTitle}>¡Cuota cubierta!</Text>
                                 <Text style={styles.successBannerSub}>
-                                    Tu pago de {CURRENT_MONTH} {CURRENT_YEAR} fue aprobado correctamente.
+                                    Tu pago de {selectedMonth} {selectedYear} fue aprobado correctamente.
                                 </Text>
                             </View>
                         </View>
                     )}
 
-                    {/* ── Banner: cuota esperada (cuando no hay pagos) ──────── */}
+                    {/* Banner: mes pasado */}
+                    {isPastMonth && !isComplete && !showForm && (
+                        <View style={styles.pastMonthBanner}>
+                            <Ionicons name="time-outline" size={16} color={Colors.status.warning} />
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.pastMonthTitle}>Cuota de {selectedMonth} {selectedYear}</Text>
+                                <Text style={styles.pastMonthSub}>
+                                    Estás subiendo un comprobante de un mes pasado.
+                                </Text>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Banner: cuota esperada */}
                     {!loadingQuota && amountExpected > 0 && !isLoading && recipes.length === 0 && (
                         <View style={styles.quotaBanner}>
                             <View style={styles.quotaBannerIcon}>
                                 <Ionicons name="cash-outline" size={20} color="#0891B2" />
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.quotaBannerTitle}>Cuota de {CURRENT_MONTH}</Text>
+                                <Text style={styles.quotaBannerTitle}>Cuota de {selectedMonth}</Text>
                                 <Text style={styles.quotaBannerAmount}>{formatCurrency(amountExpected)}</Text>
                                 <Text style={styles.quotaBannerSub}>Monto a pagar este mes</Text>
                             </View>
                         </View>
                     )}
 
-                    {/* ── Progreso del pago (cuando hay cuota configurada y pagos) ── */}
+                    {/* Progreso del pago */}
                     {amountExpected > 0 && totalPaid > 0 && !isComplete && (
                         <View style={styles.progressCard}>
                             <View style={styles.progressHeader}>
@@ -552,18 +779,20 @@ export default function RecipesScreen() {
                         </View>
                     )}
 
-                    {/* ── Formulario ─────────────────────────────────────────── */}
+                    {/* Formulario */}
                     {showForm && depId && (
                         <Animated.View style={{ opacity: formAnim }}>
                             <UploadForm
                                 depId={depId}
                                 amountExpected={amountExpected}
+                                selectedMonth={selectedMonth}
+                                selectedYear={selectedYear}
                                 onSuccess={handleSuccess}
                             />
                         </Animated.View>
                     )}
 
-                    {/* ── Lista de comprobantes del mes ─────────────────────── */}
+                    {/* Lista de comprobantes */}
                     {isLoading ? (
                         <View style={styles.centered}>
                             <ActivityIndicator size="large" color={Colors.primary.main} />
@@ -579,18 +808,18 @@ export default function RecipesScreen() {
                             <View style={styles.emptyIcon}>
                                 <Ionicons name="receipt-outline" size={32} color={Colors.screen.textMuted} />
                             </View>
-                            <Text style={styles.emptyTitle}>Sin comprobante este mes</Text>
+                            <Text style={styles.emptyTitle}>Sin comprobante {isPastMonth ? "en este período" : "este mes"}</Text>
                             <Text style={styles.stateText}>
                                 {amountExpected > 0
-                                    ? `Tu cuota de ${CURRENT_MONTH} es ${formatCurrency(amountExpected)}. Toca "Subir" para enviar tu comprobante.`
-                                    : `Toca "Subir" para enviar tu comprobante de ${CURRENT_MONTH}.`}
+                                    ? `La cuota de ${selectedMonth} es ${formatCurrency(amountExpected)}. Toca "Subir" para enviar tu comprobante.`
+                                    : `Toca "Subir" para enviar tu comprobante de ${selectedMonth} ${selectedYear}.`}
                             </Text>
                         </View>
                     ) : recipes.length > 0 ? (
                         <>
                             {recipes.length > 1 && (
                                 <View style={styles.sectionLabel}>
-                                    <Text style={styles.sectionLabelText}>COMPROBANTES DEL MES</Text>
+                                    <Text style={styles.sectionLabelText}>COMPROBANTES — {selectedMonth.toUpperCase()} {selectedYear}</Text>
                                     <View style={styles.sectionLabelLine} />
                                     <View style={styles.countBadge}>
                                         <Text style={styles.countBadgeText}>{recipes.length}</Text>
@@ -610,6 +839,18 @@ export default function RecipesScreen() {
                 </ScrollView>
             </SafeAreaView>
 
+            {/* Period Picker */}
+            <PeriodPickerModal
+                visible={showPeriodPicker}
+                availablePeriods={availablePeriods}
+                selectedKey={`${selectedMonth}-${selectedYear}`}
+                onSelect={(period) => {
+                    setSelectedMonth(period.month);
+                    setSelectedYear(period.year);
+                }}
+                onClose={() => setShowPeriodPicker(false)}
+            />
+
             {viewingImage && !viewingImage.toLowerCase().includes(".pdf") && (
                 <ImageViewer uri={viewingImage} onClose={() => setViewingImage(null)} />
             )}
@@ -617,7 +858,11 @@ export default function RecipesScreen() {
     );
 }
 
-// ─── Estilos ──────────────────────────────────────────────────────────────────
+// ── Nota: en useRecipes necesitarás agregar fetchMyRecipesByPeriod ────────────
+// Ejemplo:
+// const fetchMyRecipesByPeriod = async (depId: number, month: string, year: number) => { ... }
+
+// ── Estilos ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
     root: { flex: 1, backgroundColor: Colors.screen.bg },
@@ -628,6 +873,7 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
     },
     headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+    headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
     backBtn: {
         width: 36, height: 36, borderRadius: 10,
         backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
@@ -635,6 +881,12 @@ const styles = StyleSheet.create({
     },
     headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 17, color: Colors.screen.textPrimary },
     headerSubtitle: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
+    periodBtn: {
+        flexDirection: "row", alignItems: "center", gap: 4,
+        paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10,
+        backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
+    },
+    periodBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.dark },
     uploadBtn: {
         flexDirection: "row", alignItems: "center", gap: 5,
         paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
@@ -661,6 +913,14 @@ const styles = StyleSheet.create({
         fontFamily: "Outfit_400Regular", fontSize: 12,
         color: Colors.status.success, opacity: 0.85, marginTop: 2, lineHeight: 17,
     },
+
+    pastMonthBanner: {
+        flexDirection: "row", alignItems: "center", gap: 12,
+        backgroundColor: Colors.status.warningBg, borderWidth: 1, borderColor: Colors.status.warningBorder,
+        borderRadius: 14, padding: 14,
+    },
+    pastMonthTitle: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.status.warning },
+    pastMonthSub: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.status.warning, opacity: 0.85, marginTop: 2 },
 
     quotaBanner: {
         flexDirection: "row", alignItems: "center", gap: 14,
@@ -809,6 +1069,12 @@ const form = StyleSheet.create({
     },
     headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 15, color: Colors.screen.textPrimary },
     headerSubtitle: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.dark, marginTop: 2 },
+    pastBadge: {
+        flexDirection: "row", alignItems: "center", gap: 4,
+        paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
+        backgroundColor: Colors.status.warningBg, borderWidth: 1, borderColor: Colors.status.warningBorder,
+    },
+    pastBadgeText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, color: Colors.status.warning },
     quotaNote: {
         flexDirection: "row", alignItems: "center", gap: 8,
         backgroundColor: "#F0F9FF", borderWidth: 1, borderColor: "#BAE6FD",
@@ -881,4 +1147,52 @@ const viewer = StyleSheet.create({
         alignItems: "center", justifyContent: "center",
     },
     img: { width: "92%", height: "75%" },
+});
+
+const periodPicker = StyleSheet.create({
+    overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" },
+    sheet: {
+        backgroundColor: Colors.screen.card,
+        borderTopLeftRadius: 26, borderTopRightRadius: 26,
+        paddingHorizontal: 20, paddingBottom: 36,
+        borderTopWidth: 1, borderTopColor: Colors.screen.border, gap: 14,
+    },
+    handle: {
+        width: 36, height: 4, borderRadius: 2,
+        backgroundColor: Colors.screen.border, alignSelf: "center", marginTop: 12,
+    },
+    sheetHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
+    title: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary },
+    subtitle: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 2 },
+    closeBtn: {
+        width: 30, height: 30, borderRadius: 9,
+        backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
+        alignItems: "center", justifyContent: "center",
+    },
+    yearSeparator: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8, marginTop: 4 },
+    yearSeparatorText: {
+        fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.screen.textSecondary, letterSpacing: 0.5,
+    },
+    yearSeparatorLine: { flex: 1, height: 1, backgroundColor: Colors.screen.border },
+    monthGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 10 },
+    monthBtn: {
+        width: "22%", paddingVertical: 10, alignItems: "center", borderRadius: 10,
+        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border, gap: 3,
+    },
+    monthBtnActive: { backgroundColor: Colors.primary.main, borderColor: Colors.primary.main },
+    monthBtnCurrent: { borderColor: Colors.primary.muted, backgroundColor: Colors.primary.soft },
+    monthBtnText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.screen.textSecondary },
+    monthBtnTextActive: { fontFamily: "Outfit_700Bold", color: "#fff" },
+    currentDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.primary.main },
+    actions: { flexDirection: "row", gap: 10 },
+    cancelBtn: {
+        flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: "center",
+        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
+    },
+    cancelText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
+    applyBtn: {
+        flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center",
+        gap: 8, paddingVertical: 13, borderRadius: 12, backgroundColor: Colors.primary.main,
+    },
+    applyText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: "#fff" },
 });

@@ -197,10 +197,33 @@ export function useRecipes() {
         }
     };
 
+    // ── Fetch por período específico (mes + año) del depto ───────────────────
+    const fetchMyRecipesByPeriod = async (depId: number, month: string, year: number) => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const { data, error: dbError } = await supabase
+                .from("recipes_payment")
+                .select("*, departments ( name )")
+                .eq("dep_id", depId)
+                .eq("month", month)
+                .eq("year", year)
+                .order("created_at", { ascending: false });
+
+            if (dbError) { setError("Error al cargar los comprobantes."); return; }
+            setRecipes((data as Recipe[]) ?? []);
+        } catch {
+            setError("No se pudo conectar al servidor.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return {
         recipes, isLoading, error,
         fetchMyCurrentMonthRecipes,
         fetchMyRecipes,
+        fetchMyRecipesByPeriod,
         fetchAllRecipes,
         createRecipe,
         validateRecipe,
