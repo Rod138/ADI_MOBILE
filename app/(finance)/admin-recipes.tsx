@@ -68,33 +68,22 @@ function getStatusConfig(validated: boolean | null) {
     return { label: "Pendiente", color: Colors.status.warning, bg: Colors.status.warningBg, border: Colors.status.warningBorder, icon: "time" as const };
 }
 
-/**
- * Genera la lista de meses desde `startDate` hasta hoy (en orden desc).
- * Si startDate es undefined o null, solo muestra el mes actual.
- */
 function buildMonthList(startDate: string | null): MonthEntry[] {
     const now = new Date();
     const result: MonthEntry[] = [];
-
     const startFrom = startDate ? new Date(startDate) : now;
-    // Normalizar al primer día del mes de inicio
     const startYear = startFrom.getFullYear();
-    const startMonth = startFrom.getMonth(); // 0-indexed
-
+    const startMonth = startFrom.getMonth();
     let y = now.getFullYear();
-    let m = now.getMonth(); // 0-indexed
-
-    // Iterar hacia atrás hasta el mes de inicio
+    let m = now.getMonth();
     while (y > startYear || (y === startYear && m >= startMonth)) {
         const monthName = MONTH_NAMES[m];
         result.push({ month: monthName, year: y, key: `${monthName}-${y}` });
         m--;
         if (m < 0) { m = 11; y--; }
-        // Límite de seguridad: máximo 60 meses (5 años)
         if (result.length >= 60) break;
     }
-
-    return result; // ya está en orden desc
+    return result;
 }
 
 // ─── Image Viewer ─────────────────────────────────────────────────────────────
@@ -122,11 +111,7 @@ function MonthTab({ label, isActive, pendingCount, onPress }: {
     label: string; isActive: boolean; pendingCount: number; onPress: () => void;
 }) {
     return (
-        <TouchableOpacity
-            style={[mtab.root, isActive && mtab.rootActive]}
-            onPress={onPress}
-            activeOpacity={0.75}
-        >
+        <TouchableOpacity style={[mtab.root, isActive && mtab.rootActive]} onPress={onPress} activeOpacity={0.75}>
             <Text style={[mtab.label, isActive && mtab.labelActive]}>{label}</Text>
             {pendingCount > 0 && (
                 <View style={[mtab.badge, isActive && mtab.badgeActive]}>
@@ -188,7 +173,6 @@ function CashPaymentModal({
                                 <Ionicons name="close" size={16} color={Colors.screen.textSecondary} />
                             </TouchableOpacity>
                         </View>
-
                         <View style={cash.infoRow}>
                             <View style={cash.infoPill}>
                                 <Ionicons name="business-outline" size={13} color={Colors.primary.dark} />
@@ -199,7 +183,6 @@ function CashPaymentModal({
                                 <Text style={cash.infoPillText}>{month} {year}</Text>
                             </View>
                         </View>
-
                         {amountExpected > 0 && (
                             <View style={cash.expectedNote}>
                                 <Ionicons name="information-circle-outline" size={13} color="#0891B2" />
@@ -208,7 +191,6 @@ function CashPaymentModal({
                                 </Text>
                             </View>
                         )}
-
                         <View style={cash.divider} />
                         <View style={cash.fieldWrap}>
                             <Text style={cash.fieldLabel}>MONTO RECIBIDO</Text>
@@ -233,14 +215,12 @@ function CashPaymentModal({
                                 </View>
                             )}
                         </View>
-
                         <View style={cash.notice}>
                             <Ionicons name="information-circle-outline" size={14} color={Colors.primary.dark} />
                             <Text style={cash.noticeText}>
                                 Este registro se aprobará automáticamente y quedará visible para el residente.
                             </Text>
                         </View>
-
                         <View style={cash.actions}>
                             <TouchableOpacity style={cash.cancelBtn} onPress={onClose} activeOpacity={0.8}>
                                 <Text style={cash.cancelText}>Cancelar</Text>
@@ -303,7 +283,6 @@ function DeptRow({ dept, summary, onValidate, onViewReceipt, onCashPayment }: {
                 )}
             </View>
 
-            {/* Badge de estado */}
             {missing ? (
                 <View style={drow.missingBadge}>
                     <Ionicons name="alert-circle-outline" size={12} color={Colors.status.error} />
@@ -351,17 +330,207 @@ function DeptRow({ dept, summary, onValidate, onViewReceipt, onCashPayment }: {
     );
 }
 
+// ─── Edit Amount Modal ────────────────────────────────────────────────────────
+// Modal para que el admin edite el monto manualmente (pago del restante en efectivo)
+
+function EditAmountModal({
+    recipe, deptName, onClose, onConfirm,
+}: {
+    recipe: Recipe;
+    deptName: string;
+    onClose: () => void;
+    onConfirm: (recipeId: number, newAmount: number) => Promise<void>;
+}) {
+    const remaining = recipe.amount_expected > 0
+        ? Math.max(recipe.amount_expected - recipe.amount_paid, 0)
+        : 0;
+
+    const [amount, setAmount] = useState(remaining > 0 ? String(remaining) : "");
+    const [amountError, setAmountError] = useState<string | undefined>();
+    const [saving, setSaving] = useState(false);
+
+    const handleConfirm = async () => {
+        Keyboard.dismiss();
+        const n = parseFloat(amount.replace(/[^0-9.]/g, ""));
+        if (!amount.trim() || isNaN(n) || n <= 0) {
+            setAmountError("El monto debe ser mayor a 0.");
+            return;
+        }
+        const newTotal = recipe.amount_paid + n;
+        Alert.alert(
+            "Registrar pago adicional",
+            `¿Agregar ${formatCurrency(n)} al pago de ${deptName}?\n\nTotal resultante: ${formatCurrency(newTotal)}${recipe.amount_expected > 0 ? ` de ${formatCurrency(recipe.amount_expected)} esperados` : ""}`,
+            [
+                { text: "Cancelar", style: "cancel" },
+                {
+                    text: "Confirmar", onPress: async () => {
+                        setSaving(true);
+                        await onConfirm(recipe.id, newTotal);
+                        setSaving(false);
+                        onClose();
+                    }
+                },
+            ]
+        );
+    };
+
+    return (
+        <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+                <View style={editModal.overlay}>
+                    <View style={editModal.sheet}>
+                        <View style={editModal.handle} />
+
+                        {/* Header */}
+                        <View style={editModal.header}>
+                            <View style={editModal.headerIconWrap}>
+                                <Ionicons name="pencil" size={20} color={Colors.primary.dark} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={editModal.headerTitle}>Registrar pago adicional</Text>
+                                <Text style={editModal.headerSub}>{deptName} · {recipe.month} {recipe.year}</Text>
+                            </View>
+                            <TouchableOpacity style={editModal.closeBtn} onPress={onClose} activeOpacity={0.7}>
+                                <Ionicons name="close" size={16} color={Colors.screen.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Resumen de montos actuales */}
+                        <View style={editModal.summaryCard}>
+                            <View style={editModal.summaryItem}>
+                                <Text style={editModal.summaryLabel}>PAGADO</Text>
+                                <Text style={[editModal.summaryValue, { color: Colors.primary.dark }]}>
+                                    {formatCurrency(recipe.amount_paid)}
+                                </Text>
+                            </View>
+                            {recipe.amount_expected > 0 && (
+                                <>
+                                    <View style={editModal.summaryDivider} />
+                                    <View style={editModal.summaryItem}>
+                                        <Text style={editModal.summaryLabel}>ESPERADO</Text>
+                                        <Text style={[editModal.summaryValue, { color: Colors.screen.textSecondary }]}>
+                                            {formatCurrency(recipe.amount_expected)}
+                                        </Text>
+                                    </View>
+                                    <View style={editModal.summaryDivider} />
+                                    <View style={editModal.summaryItem}>
+                                        <Text style={editModal.summaryLabel}>RESTANTE</Text>
+                                        <Text style={[editModal.summaryValue, { color: remaining > 0 ? Colors.status.error : Colors.status.success }]}>
+                                            {remaining > 0 ? formatCurrency(remaining) : "Completo"}
+                                        </Text>
+                                    </View>
+                                </>
+                            )}
+                        </View>
+
+                        {/* Sugerencia rápida: pagar el restante completo */}
+                        {remaining > 0 && (
+                            <TouchableOpacity
+                                style={editModal.quickFillBtn}
+                                onPress={() => setAmount(String(remaining))}
+                                activeOpacity={0.8}
+                            >
+                                <Ionicons name="flash-outline" size={13} color={Colors.primary.dark} />
+                                <Text style={editModal.quickFillText}>
+                                    Completar monto restante: <Text style={{ fontFamily: "Outfit_700Bold" }}>{formatCurrency(remaining)}</Text>
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+
+                        <View style={editModal.divider} />
+
+                        {/* Input de monto adicional */}
+                        <View style={editModal.fieldWrap}>
+                            <Text style={editModal.fieldLabel}>MONTO ADICIONAL RECIBIDO EN EFECTIVO</Text>
+                            <View style={[editModal.inputRow, amountError && editModal.inputRowError]}>
+                                <Text style={editModal.currencySymbol}>$</Text>
+                                <TextInput
+                                    style={editModal.input}
+                                    placeholder="0"
+                                    placeholderTextColor={Colors.screen.textMuted}
+                                    keyboardType="decimal-pad"
+                                    maxLength={8}
+                                    value={amount}
+                                    onChangeText={v => { setAmount(v.replace(/[^0-9.]/g, "")); setAmountError(undefined); }}
+                                    autoFocus
+                                    returnKeyType="done"
+                                    onSubmitEditing={handleConfirm}
+                                />
+                                {amount.length > 0 && (
+                                    <TouchableOpacity onPress={() => { setAmount(""); setAmountError(undefined); }}>
+                                        <Ionicons name="close-circle" size={18} color={Colors.screen.textMuted} />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                            {amountError && (
+                                <View style={editModal.errorRow}>
+                                    <Ionicons name="alert-circle-outline" size={12} color={Colors.status.error} />
+                                    <Text style={editModal.errorText}>{amountError}</Text>
+                                </View>
+                            )}
+                            {/* Preview del nuevo total */}
+                            {amount.length > 0 && !isNaN(parseFloat(amount)) && parseFloat(amount) > 0 && (
+                                <View style={editModal.previewTotal}>
+                                    <Ionicons name="calculator-outline" size={13} color={Colors.primary.dark} />
+                                    <Text style={editModal.previewTotalText}>
+                                        Nuevo total:{" "}
+                                        <Text style={{ fontFamily: "Outfit_700Bold", color: Colors.primary.dark }}>
+                                            {formatCurrency(recipe.amount_paid + parseFloat(amount))}
+                                        </Text>
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+
+                        <View style={editModal.notice}>
+                            <Ionicons name="information-circle-outline" size={14} color={Colors.primary.dark} />
+                            <Text style={editModal.noticeText}>
+                                El monto adicional se sumará al pago existente. El comprobante permanecerá aprobado si ya lo estaba.
+                            </Text>
+                        </View>
+
+                        {/* Acciones */}
+                        <View style={editModal.actions}>
+                            <TouchableOpacity style={editModal.cancelBtn} onPress={onClose} activeOpacity={0.8}>
+                                <Text style={editModal.cancelText}>Cancelar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[editModal.confirmBtn, saving && { opacity: 0.6 }]}
+                                onPress={handleConfirm}
+                                disabled={saving}
+                                activeOpacity={0.85}
+                            >
+                                {saving ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="checkmark-circle" size={17} color="#fff" />
+                                        <Text style={editModal.confirmText}>Registrar pago</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </KeyboardAvoidingView>
+        </Modal>
+    );
+}
+
 // ─── Receipt Detail Modal ─────────────────────────────────────────────────────
 
-function ReceiptModal({ recipe, deptName, onClose, onValidate }: {
+function ReceiptModal({ recipe, deptName, onClose, onValidate, onEditAmount }: {
     recipe: Recipe; deptName: string;
-    onClose: () => void; onValidate: (id: number, validated: boolean) => void;
+    onClose: () => void;
+    onValidate: (id: number, validated: boolean) => void;
+    onEditAmount: (recipe: Recipe) => void;
 }) {
     const sc = getStatusConfig(recipe.validated ?? null);
     const isPdf = recipe.url_image?.toLowerCase().includes(".pdf") || recipe.url_image?.includes("/raw/");
     const isPending = recipe.validated === null || recipe.validated === undefined;
+    const isApproved = recipe.validated === true;
     const [viewingImg, setViewingImg] = useState(false);
-    const isPartial = recipe.amount_paid < recipe.amount_expected;
+    const isPartial = recipe.amount_expected > 0 && recipe.amount_paid < recipe.amount_expected;
 
     return (
         <Modal visible animationType="slide" transparent onRequestClose={onClose}>
@@ -384,6 +553,7 @@ function ReceiptModal({ recipe, deptName, onClose, onValidate }: {
                             <Ionicons name="close" size={15} color={Colors.screen.textSecondary} />
                         </TouchableOpacity>
                     </View>
+
                     <ScrollView showsVerticalScrollIndicator={false}>
                         {/* Montos */}
                         <View style={rmodal.amountsCard}>
@@ -401,14 +571,44 @@ function ReceiptModal({ recipe, deptName, onClose, onValidate }: {
                                 </>
                             )}
                         </View>
+
+                        {/* Alerta de pago parcial + botón de editar monto */}
                         {isPartial && (
-                            <View style={rmodal.partialAlert}>
-                                <Ionicons name="pie-chart-outline" size={14} color={Colors.status.warning} />
-                                <Text style={rmodal.partialAlertText}>
-                                    Pago parcial — faltan {formatCurrency(recipe.amount_expected - recipe.amount_paid)}
-                                </Text>
+                            <View style={rmodal.partialSection}>
+                                <View style={rmodal.partialAlert}>
+                                    <Ionicons name="pie-chart-outline" size={14} color={Colors.status.warning} />
+                                    <Text style={rmodal.partialAlertText}>
+                                        Pago parcial — faltan {formatCurrency(recipe.amount_expected - recipe.amount_paid)}
+                                    </Text>
+                                </View>
+                                {/* Botón para registrar el restante en efectivo */}
+                                <TouchableOpacity
+                                    style={rmodal.editAmountBtn}
+                                    onPress={() => { onClose(); onEditAmount(recipe); }}
+                                    activeOpacity={0.85}
+                                >
+                                    <Ionicons name="cash-outline" size={16} color={Colors.primary.dark} />
+                                    <Text style={rmodal.editAmountBtnText}>
+                                        Registrar pago del restante en efectivo
+                                    </Text>
+                                    <Ionicons name="chevron-forward" size={14} color={Colors.primary.dark} />
+                                </TouchableOpacity>
                             </View>
                         )}
+
+                        {/* Botón de edición manual de monto siempre visible para admin (aunque esté aprobado) */}
+                        {!isPartial && isApproved && (
+                            <TouchableOpacity
+                                style={rmodal.editAmountBtnSecondary}
+                                onPress={() => { onClose(); onEditAmount(recipe); }}
+                                activeOpacity={0.85}
+                            >
+                                <Ionicons name="pencil-outline" size={14} color={Colors.screen.textMuted} />
+                                <Text style={rmodal.editAmountBtnSecondaryText}>Agregar pago adicional</Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {/* Comprobante */}
                         <View style={rmodal.section}>
                             <Text style={rmodal.sectionLabel}>COMPROBANTE</Text>
                             {recipe.url_image ? (
@@ -439,15 +639,27 @@ function ReceiptModal({ recipe, deptName, onClose, onValidate }: {
                                 </View>
                             )}
                         </View>
+
+                        {/* Acciones de validación */}
                         {isPending && (
                             <View style={rmodal.actions}>
                                 <TouchableOpacity style={[rmodal.actionBtn, rmodal.rejectBtn]}
-                                    onPress={() => { Alert.alert("Rechazar", `¿Rechazar comprobante de ${deptName}?`, [{ text: "Cancelar", style: "cancel" }, { text: "Rechazar", style: "destructive", onPress: () => { onValidate(recipe.id, false); onClose(); } }]); }} activeOpacity={0.8}>
+                                    onPress={() => {
+                                        Alert.alert("Rechazar", `¿Rechazar comprobante de ${deptName}?`, [
+                                            { text: "Cancelar", style: "cancel" },
+                                            { text: "Rechazar", style: "destructive", onPress: () => { onValidate(recipe.id, false); onClose(); } }
+                                        ]);
+                                    }} activeOpacity={0.8}>
                                     <Ionicons name="close" size={15} color={Colors.status.error} />
                                     <Text style={[rmodal.actionBtnText, { color: Colors.status.error }]}>Rechazar</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity style={[rmodal.actionBtn, rmodal.approveBtn]}
-                                    onPress={() => { Alert.alert("Aprobar", `¿Aprobar comprobante de ${deptName}?`, [{ text: "Cancelar", style: "cancel" }, { text: "Aprobar", onPress: () => { onValidate(recipe.id, true); onClose(); } }]); }} activeOpacity={0.8}>
+                                    onPress={() => {
+                                        Alert.alert("Aprobar", `¿Aprobar comprobante de ${deptName}?`, [
+                                            { text: "Cancelar", style: "cancel" },
+                                            { text: "Aprobar", onPress: () => { onValidate(recipe.id, true); onClose(); } }
+                                        ]);
+                                    }} activeOpacity={0.8}>
                                     <Ionicons name="checkmark" size={15} color={Colors.status.success} />
                                     <Text style={[rmodal.actionBtnText, { color: Colors.status.success }]}>Aprobar</Text>
                                 </TouchableOpacity>
@@ -523,10 +735,10 @@ export default function AdminRecipesScreen() {
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [validatingId, setValidatingId] = useState<number | null>(null);
     const [cashTarget, setCashTarget] = useState<Department | null>(null);
+    const [editAmountRecipe, setEditAmountRecipe] = useState<Recipe | null>(null); // ← NUEVO
 
     const currentYear = new Date().getFullYear();
 
-    // Cargar fondo (para obtener fecha de inicio) → generar lista de meses
     useEffect(() => {
         setFundLoading(true);
         fetchFund().then(fund => {
@@ -555,7 +767,6 @@ export default function AdminRecipesScreen() {
         fetchAllRecipes(currentYear);
     }, [currentYear]);
 
-    // Cargar cuota del mes seleccionado
     useEffect(() => {
         if (!selectedMonth) return;
         const fetchQuota = async () => {
@@ -567,7 +778,6 @@ export default function AdminRecipesScreen() {
         fetchQuota();
     }, [selectedMonth]);
 
-    // Pagos del mes agrupados por depto
     const deptSummaries = useMemo(() => {
         if (!selectedMonth) return new Map<number, DeptPaymentSummary>();
         const monthRecipes = recipes.filter(r => r.month === selectedMonth.month && r.year === selectedMonth.year);
@@ -620,6 +830,25 @@ export default function AdminRecipesScreen() {
         } catch { Alert.alert("Error", "No se pudo conectar al servidor."); }
     };
 
+    // ── Actualizar monto de pago de un recibo existente ────────────────────────
+    const handleEditAmount = async (recipeId: number, newTotalAmount: number) => {
+        try {
+            const { error: dbError } = await supabase
+                .from("recipes_payment")
+                .update({ amount_paid: newTotalAmount })
+                .eq("id", recipeId);
+
+            if (dbError) {
+                Alert.alert("Error", "No se pudo actualizar el monto. Intenta de nuevo.");
+                return;
+            }
+            await fetchAllRecipes(currentYear);
+            Alert.alert("¡Listo!", `Monto actualizado a ${formatCurrency(newTotalAmount)} correctamente.`);
+        } catch {
+            Alert.alert("Error", "No se pudo conectar al servidor.");
+        }
+    };
+
     const isReady = !isLoading && !depsLoading && !fundLoading;
     const getDeptName = (depId: number) => departments.find(d => d.id === depId)?.name ?? "Departamento";
     const monthRecipesForSummary = useMemo(() =>
@@ -651,7 +880,7 @@ export default function AdminRecipesScreen() {
                     <View style={styles.noFundBanner}>
                         <Ionicons name="warning-outline" size={16} color={Colors.status.warning} />
                         <Text style={styles.noFundText}>
-                            Configura el fondo inicial en "Cuota mensual" para ver los períodos disponibles.
+                            Configura el fondo inicial en "Configuración financiera" para ver los períodos disponibles.
                         </Text>
                     </View>
                 ) : (
@@ -721,8 +950,13 @@ export default function AdminRecipesScreen() {
                                             <ActivityIndicator size="small" color={Colors.primary.main} />
                                         </View>
                                     )}
-                                    <DeptRow dept={dept} summary={summary}
-                                        onValidate={handleValidate} onViewReceipt={setSelectedRecipe} onCashPayment={setCashTarget} />
+                                    <DeptRow
+                                        dept={dept}
+                                        summary={summary}
+                                        onValidate={handleValidate}
+                                        onViewReceipt={setSelectedRecipe}
+                                        onCashPayment={setCashTarget}
+                                    />
                                 </View>
                             );
                         }}
@@ -732,15 +966,42 @@ export default function AdminRecipesScreen() {
                 )}
             </SafeAreaView>
 
+            {/* Receipt Detail Modal */}
             {selectedRecipe && (
-                <ReceiptModal recipe={selectedRecipe} deptName={getDeptName(selectedRecipe.dep_id)}
-                    onClose={() => setSelectedRecipe(null)} onValidate={handleValidate} />
+                <ReceiptModal
+                    recipe={selectedRecipe}
+                    deptName={getDeptName(selectedRecipe.dep_id)}
+                    onClose={() => setSelectedRecipe(null)}
+                    onValidate={handleValidate}
+                    onEditAmount={(recipe) => {
+                        setSelectedRecipe(null);
+                        setEditAmountRecipe(recipe);
+                    }}
+                />
             )}
+
+            {/* Edit Amount Modal */}
+            {editAmountRecipe && (
+                <EditAmountModal
+                    recipe={editAmountRecipe}
+                    deptName={getDeptName(editAmountRecipe.dep_id)}
+                    onClose={() => setEditAmountRecipe(null)}
+                    onConfirm={handleEditAmount}
+                />
+            )}
+
+            {/* Cash Payment Modal */}
             {cashTarget && selectedMonth && (
-                <CashPaymentModal dept={cashTarget} month={selectedMonth.month} year={selectedMonth.year}
+                <CashPaymentModal
+                    dept={cashTarget}
+                    month={selectedMonth.month}
+                    year={selectedMonth.year}
                     amountExpected={monthlyAmountExpected}
-                    onClose={() => setCashTarget(null)} onConfirm={handleCashPayment} />
+                    onClose={() => setCashTarget(null)}
+                    onConfirm={handleCashPayment}
+                />
             )}
+
             {viewingImage && (
                 <ImageViewer uri={viewingImage} onClose={() => setViewingImage(null)} />
             )}
@@ -863,7 +1124,7 @@ const sbar = StyleSheet.create({
 
 const rmodal = StyleSheet.create({
     overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" },
-    sheet: { backgroundColor: Colors.screen.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 36, maxHeight: "85%", borderTopWidth: 1, borderTopColor: Colors.screen.border },
+    sheet: { backgroundColor: Colors.screen.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: 36, maxHeight: "90%", borderTopWidth: 1, borderTopColor: Colors.screen.border },
     handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.screen.border, alignSelf: "center", marginTop: 12, marginBottom: 16 },
     header: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 },
     avatar: { width: 38, height: 38, borderRadius: 11, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
@@ -879,8 +1140,25 @@ const rmodal = StyleSheet.create({
     amountDivider: { width: 1, height: 40, backgroundColor: Colors.screen.border },
     amountItemLabel: { fontFamily: "Outfit_700Bold", fontSize: 9, color: Colors.screen.textMuted, letterSpacing: 1.2, marginBottom: 4 },
     amountItemValue: { fontFamily: "Outfit_700Bold", fontSize: 16 },
-    partialAlert: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.status.warningBg, borderRadius: 10, borderWidth: 1, borderColor: Colors.status.warningBorder, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 12 },
+    // Sección de pago parcial
+    partialSection: { gap: 8, marginBottom: 12 },
+    partialAlert: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.status.warningBg, borderRadius: 10, borderWidth: 1, borderColor: Colors.status.warningBorder, paddingHorizontal: 12, paddingVertical: 9 },
     partialAlertText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.warning },
+    // Botón de editar monto (principal - para pagos parciales)
+    editAmountBtn: {
+        flexDirection: "row", alignItems: "center", gap: 10,
+        paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
+        backgroundColor: Colors.primary.soft, borderWidth: 1.5, borderColor: Colors.primary.muted,
+    },
+    editAmountBtnText: { flex: 1, fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.primary.dark },
+    // Botón de editar monto secundario (para pagos ya completos)
+    editAmountBtnSecondary: {
+        flexDirection: "row", alignItems: "center", gap: 8,
+        paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10,
+        backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border,
+        alignSelf: "flex-end", marginBottom: 12,
+    },
+    editAmountBtnSecondaryText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.screen.textMuted },
     section: { marginBottom: 14 },
     sectionLabel: { fontFamily: "Outfit_700Bold", fontSize: 10, color: Colors.screen.textMuted, letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 },
     img: { width: "100%", height: 200, borderRadius: 12 },
@@ -897,6 +1175,86 @@ const rmodal = StyleSheet.create({
     approveBtn: { backgroundColor: Colors.status.successBg, borderColor: Colors.status.successBorder },
     rejectBtn: { backgroundColor: Colors.status.errorBg, borderColor: Colors.status.errorBorder },
     actionBtnText: { fontFamily: "Outfit_700Bold", fontSize: 14 },
+});
+
+const editModal = StyleSheet.create({
+    overlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.45)" },
+    sheet: {
+        backgroundColor: Colors.screen.card,
+        borderTopLeftRadius: 26, borderTopRightRadius: 26,
+        paddingHorizontal: 20, paddingBottom: 36,
+        borderTopWidth: 1, borderTopColor: Colors.screen.border,
+    },
+    handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.screen.border, alignSelf: "center", marginTop: 12, marginBottom: 18 },
+    header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
+    headerIconWrap: {
+        width: 44, height: 44, borderRadius: 13,
+        backgroundColor: Colors.primary.soft, borderWidth: 1.5, borderColor: Colors.primary.muted,
+        alignItems: "center", justifyContent: "center",
+    },
+    headerTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary },
+    headerSub: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, marginTop: 1 },
+    closeBtn: { width: 32, height: 32, borderRadius: 10, backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border, alignItems: "center", justifyContent: "center" },
+    summaryCard: {
+        flexDirection: "row", alignItems: "center",
+        backgroundColor: Colors.screen.bg, borderRadius: 12,
+        borderWidth: 1, borderColor: Colors.screen.border,
+        overflow: "hidden", marginBottom: 12,
+    },
+    summaryItem: { flex: 1, alignItems: "center", paddingVertical: 12 },
+    summaryDivider: { width: 1, height: 40, backgroundColor: Colors.screen.border },
+    summaryLabel: {
+        fontFamily: "Outfit_700Bold", fontSize: 9,
+        color: Colors.screen.textMuted, letterSpacing: 1.2, marginBottom: 4,
+    },
+    summaryValue: { fontFamily: "Outfit_700Bold", fontSize: 15 },
+    quickFillBtn: {
+        flexDirection: "row", alignItems: "center", gap: 8,
+        paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
+        backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
+        marginBottom: 12,
+    },
+    quickFillText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.primary.dark },
+    divider: { height: 1, backgroundColor: Colors.screen.border, marginBottom: 18 },
+    fieldWrap: { marginBottom: 14 },
+    fieldLabel: {
+        fontFamily: "Outfit_700Bold", fontSize: 11, color: Colors.screen.textSecondary,
+        letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8,
+    },
+    inputRow: {
+        flexDirection: "row", alignItems: "center", height: 60, borderRadius: 14,
+        borderWidth: 2, borderColor: Colors.primary.main,
+        backgroundColor: Colors.primary.soft, paddingHorizontal: 16, gap: 6,
+    },
+    inputRowError: { borderColor: Colors.status.error, backgroundColor: Colors.status.errorBg },
+    currencySymbol: { fontFamily: "Outfit_800ExtraBold", fontSize: 24, color: Colors.primary.dark },
+    input: { flex: 1, fontFamily: "Outfit_800ExtraBold", fontSize: 28, color: Colors.screen.textPrimary },
+    errorRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6 },
+    errorText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.error },
+    previewTotal: {
+        flexDirection: "row", alignItems: "center", gap: 8,
+        backgroundColor: Colors.primary.soft, borderRadius: 8,
+        borderWidth: 1, borderColor: Colors.primary.muted,
+        paddingHorizontal: 12, paddingVertical: 8, marginTop: 8,
+    },
+    previewTotalText: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textSecondary },
+    notice: {
+        flexDirection: "row", alignItems: "flex-start", gap: 8,
+        backgroundColor: Colors.primary.soft, borderRadius: 10,
+        borderWidth: 1, borderColor: Colors.primary.muted,
+        paddingHorizontal: 12, paddingVertical: 10, marginBottom: 20,
+    },
+    noticeText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.primary.dark, lineHeight: 17 },
+    actions: { flexDirection: "row", gap: 10 },
+    cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center", backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border },
+    cancelText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
+    confirmBtn: {
+        flex: 2, flexDirection: "row", alignItems: "center", justifyContent: "center",
+        gap: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: Colors.primary.main,
+        shadowColor: Colors.primary.dark, shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
+    },
+    confirmText: { fontFamily: "Outfit_700Bold", fontSize: 15, color: "#fff" },
 });
 
 const viewer = StyleSheet.create({
