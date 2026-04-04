@@ -192,32 +192,16 @@ export default function HomeScreen() {
                         onPress={() => router.push("/(finance)" as any)}
                     />
 
-                    {/* Quick actions */}
-                    <View style={styles.sectionLabel}>
-                        <Text style={styles.sectionLabelText}>ACCESOS RÁPIDOS</Text>
-                        <View style={styles.sectionLabelLine} />
-                    </View>
-
-                    <View style={styles.quickActions}>
-                        <QuickAction
-                            icon="add-circle-outline"
-                            label="Nueva incidencia"
-                            onPress={() => router.push("/(incidents)/create" as any)}
-                            color={Colors.primary.main}
-                        />
-                        <QuickAction
-                            icon="notifications-outline"
-                            label="Notificaciones"
-                            onPress={() => router.push("/(tabs)/notifications" as any)}
-                            color={Colors.secondary.main}
-                        />
-                        <QuickAction
-                            icon="person-outline"
-                            label="Mi perfil"
-                            onPress={() => router.push("/(tabs)/profile" as any)}
-                            color="#6366F1"
-                        />
-                    </View>
+                    <ModuleCard
+                        title="Departamentos"
+                        subtitle="Gestión de departamentos"
+                        description="Consulta el estado de cuenta del condominio, cuotas de mantenimiento, gastos y reportes financieros."
+                        icon="home-outline"
+                        accentColor={Colors.secondary.main}
+                        accentBg={Colors.secondary.soft}
+                        accentBorder="#FED7AA"
+                        onPress={() => router.push("/(departments)" as any)}
+                    />
 
                     {/* Footer info */}
                     <View style={styles.footerInfo}>

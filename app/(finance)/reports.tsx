@@ -3,6 +3,8 @@ import { useSession } from "@/context/AuthContext";
 import supabase from "@/lib/supabase";
 import { generateMonthlyReportHTML } from "@/utils/generateReportHTML";
 import { Ionicons } from "@expo/vector-icons";
+import { Asset } from "expo-asset";
+import { File } from "expo-file-system";
 import * as Print from "expo-print";
 import { router } from "expo-router";
 import * as Sharing from "expo-sharing";
@@ -396,11 +398,26 @@ export default function ReportsScreen() {
         if (!report) return;
         setSharing(true);
         try {
+            // Cargar logo como base64
+            let logoBase64: string | undefined;
+            try {
+                const logoAsset = Asset.fromModule(require('./../../assets/images/logoRP.png'));
+                await logoAsset.downloadAsync();
+                if (logoAsset.localUri) {
+                    const logoFile = new File(logoAsset.localUri);
+                    const raw = await logoFile.base64();
+                    logoBase64 = `data:image/png;base64,${raw}`;
+                }
+            } catch {
+                // Si falla la carga del logo, el PDF se genera igual sin él
+            }
+
             const html = generateMonthlyReportHTML({
                 month: report.month,
                 year: report.year,
                 condominioName: "Residencial del Parque",
                 towerName: "Torre M",
+                logoBase64,
                 totalIncome: report.income,
                 totalExpenses: report.expenses,
                 totalIncidentCosts: report.incidentCosts,
