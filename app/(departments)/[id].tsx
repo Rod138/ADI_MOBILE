@@ -230,7 +230,10 @@ function CreateUserModal({
                             theme="light" label="Correo electrónico" placeholder="correo@ejemplo.com"
                             leftIcon="mail-outline" keyboardType="email-address" autoCapitalize="none"
                             value={email}
-                            onChangeText={t => { setEmail(t); clearFieldError("email"); }}
+                            onChangeText={t => {
+                                setEmail(t.replace(/[^a-zA-Z0-9.@]/g, ""));
+                                clearFieldError("email");
+                            }}
                             error={fieldErrors.email} maxLength={320}
                         />
 
@@ -248,7 +251,10 @@ function CreateUserModal({
                         <InputField
                             theme="light" label="Contraseña" placeholder="Mínimo 8 caracteres"
                             leftIcon="lock-closed-outline" isPassword value={password}
-                            onChangeText={t => { setPassword(t); clearFieldError("password"); }}
+                            onChangeText={t => {
+                                setPassword(t.replace(/\s/g, ""));
+                                clearFieldError("password");
+                            }}
                             error={fieldErrors.password} maxLength={32}
                         />
 

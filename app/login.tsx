@@ -29,18 +29,20 @@ export default function LoginScreen() {
     const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
 
     const handleEmailChange = (text: string) => {
-        setEmail(text);
+        const filteredText = text.replace(/[^a-zA-Z0-9.@]/g, "");
+        setEmail(filteredText);
         if (touched.email) {
-            const errs = validateLoginForm(text, password);
+            const errs = validateLoginForm(filteredText, password);
             setFieldErrors((prev) => ({ ...prev, email: errs.email }));
         }
         if (error) clearError();
     };
 
     const handlePasswordChange = (text: string) => {
-        setPassword(text);
+        const filteredText = text.replace(/\s/g, "");
+        setPassword(filteredText);
         if (touched.password) {
-            const errs = validateLoginForm(email, text);
+            const errs = validateLoginForm(email, filteredText);
             setFieldErrors((prev) => ({ ...prev, password: errs.password }));
         }
         if (error) clearError();

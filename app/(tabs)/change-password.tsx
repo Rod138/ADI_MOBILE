@@ -54,7 +54,7 @@ export default function ChangePasswordScreen() {
                     leftIcon="lock-closed-outline"
                     isPassword
                     value={current}
-                    onChangeText={(t) => { setCurrent(t); clearFieldError("current"); }}
+                    onChangeText={(t) => { setCurrent(t.replace(/\s/g, "")); clearFieldError("current"); }}
                     error={fieldErrors.current}
                     maxLength={MAX_CHANGE_PASSWORD_LENGTH}
                 />
@@ -65,7 +65,7 @@ export default function ChangePasswordScreen() {
                     leftIcon="lock-open-outline"
                     isPassword
                     value={newPass}
-                    onChangeText={(t) => { setNewPass(t); clearFieldError("newPass"); }}
+                    onChangeText={(t) => { setNewPass(t.replace(/\s/g, "")); clearFieldError("newPass"); }}
                     error={fieldErrors.newPass}
                     maxLength={MAX_CHANGE_PASSWORD_LENGTH}
                 />
@@ -78,7 +78,7 @@ export default function ChangePasswordScreen() {
                     returnKeyType="done"
                     onSubmitEditing={handleSubmit}
                     value={confirm}
-                    onChangeText={(t) => { setConfirm(t); clearFieldError("confirm"); }}
+                    onChangeText={(t) => { setConfirm(t.replace(/\s/g, "")); clearFieldError("confirm"); }}
                     error={fieldErrors.confirm}
                     maxLength={MAX_CHANGE_PASSWORD_LENGTH}
                 />

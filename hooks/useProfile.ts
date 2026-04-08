@@ -57,6 +57,23 @@ export function useProfile() {
         clearMessages();
 
         try {
+            const { data: existingUser, error: checkError } = await supabase
+                .from("users")
+                .select("id")
+                .eq("phone", newPhone)
+                .neq("id", userId)
+                .maybeSingle();
+
+            if (checkError) {
+                setError("Error al verificar el teléfono.");
+                return false;
+            }
+
+            if (existingUser) {
+                setError("El teléfono ya está registrado por otro usuario.");
+                return false;
+            }
+
             const { error: dbError } = await supabase
                 .from("users")
                 .update({ phone: newPhone })

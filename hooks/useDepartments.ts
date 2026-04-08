@@ -132,8 +132,7 @@ export function useDepartments() {
         setIsLoading(true);
         clearMessages();
         try {
-            const { id, ...cleanPayload } = payload as any;
-
+            // 1. Verificar email duplicado
             const { data: existing } = await supabase
                 .from("users")
                 .select("id")
@@ -145,11 +144,57 @@ export function useDepartments() {
                 return false;
             }
 
+            // 1.5 Verificar teléfono duplicado
+            const { data: existingPhone, error: phoneError } = await supabase
+                .from("users")
+                .select("id")
+                .eq("phone", payload.phone)
+                .maybeSingle();
+
+            if (phoneError) {
+                setError("El telefono ya esta registrado por otro usuario");
+                return false;
+            }
+
+            if (existingPhone) {
+                setError("El teléfono ya está registrado por otro usuario.");
+                return false;
+            }
+
+            // 2. Calcular el siguiente ID igual que la web
+            const { data: maxRow } = await supabase
+                .from("users")
+                .select("id")
+                .order("id", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const newId = (maxRow?.id ?? 0) + 1;
+
+            // 3. Insertar con el ID calculado
             const { error: dbError } = await supabase
                 .from("users")
-                .insert([{ ...cleanPayload, rol_id: 1 }]);
+                .insert([{
+                    id: newId,
+                    name: payload.name,
+                    ap: payload.ap,
+                    am: payload.am,
+                    email: payload.email,
+                    phone: payload.phone,
+                    password: payload.password,
+                    dep_id: payload.dep_id,
+                    rol_id: 1,
+                }]);
 
-            if (dbError) { setError(dbError.message); return false; }
+            if (dbError) {
+                // Si hay colisión de ID (otro insert llegó primero), reintenta una vez
+                if (dbError.code === "23505") {
+                    setError("Conflicto al asignar ID. Intenta de nuevo.");
+                    return false;
+                }
+                setError(dbError.message);
+                return false;
+            }
 
             setSuccess("Usuario creado correctamente.");
             return true;
