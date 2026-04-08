@@ -85,7 +85,7 @@ function ExpenseCard({
                         <Text style={card.description} numberOfLines={2}>
                             {item.description}
                         </Text>
-                        <Text style={card.date}>{formatDate(item.created_at)}</Text>
+                        <Text style={card.date}>{formatDate(item.expense_date)}</Text>
                     </View>
                     <View style={card.amountWrap}>
                         <Text style={card.amountLabel}>MONTO</Text>
@@ -372,7 +372,7 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
 function SummaryBanner({ expenses, canManage }: { expenses: Expense[]; canManage: boolean }) {
     const total = expenses.reduce((acc, e) => acc + Number(e.amount), 0);
     const thisMonth = expenses.filter(e => {
-        const d = new Date(e.created_at);
+        const d = new Date(e.expense_date);
         const now = new Date();
         return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     }).reduce((acc, e) => acc + Number(e.amount), 0);

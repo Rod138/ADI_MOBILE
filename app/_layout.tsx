@@ -1,3 +1,4 @@
+import { AuthProvider } from "@/context/AuthContext";
 import {
   Outfit_400Regular,
   Outfit_500Medium,
@@ -7,7 +8,6 @@ import {
   Outfit_900Black,
   useFonts,
 } from "@expo-google-fonts/outfit";
-import { AuthProvider } from "@/context/AuthContext";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";

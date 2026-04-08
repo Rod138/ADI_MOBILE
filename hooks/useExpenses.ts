@@ -6,7 +6,6 @@ export interface Expense {
     description: string;
     url_image: string | null;
     amount: number;
-    created_at: string;
     expense_date: string;
 }
 
@@ -30,7 +29,7 @@ export function useExpenses() {
             const { data, error: dbError } = await supabase
                 .from("tower_expenses")
                 .select("*")
-                .order("created_at", { ascending: false });
+                .order("expense_date", { ascending: false });
 
             if (dbError) {
                 setError("Error al cargar los gastos.");
@@ -52,7 +51,7 @@ export function useExpenses() {
             const now = new Date().toISOString();
             const { error: dbError } = await supabase
                 .from("tower_expenses")
-                .insert([{ ...payload, created_at: now, expense_date: payload.expense_date ?? now }]);
+                .insert([{ ...payload, expense_date: payload.expense_date ?? now }]);
 
             if (dbError) {
                 console.error("Error Supabase createExpense:", dbError.message, dbError.details);

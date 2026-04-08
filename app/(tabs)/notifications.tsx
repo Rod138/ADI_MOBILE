@@ -6,6 +6,7 @@ import {
     type Notification,
 } from "@/context/NotificationsContext";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useRef } from "react";
 import {
     ActivityIndicator,
@@ -262,8 +263,25 @@ export default function NotificationsScreen() {
 
     const listItems = groupNotifications(notifications);
 
-    const handleCardPress = (id: number) => {
+
+    const handleCardPress = async (id: number, notification: Notification) => {
         markAsRead(id);
+
+        const { type_id } = notification;
+
+        if (type_id === NTYPE.INCIDENT_STATUS_CHANGE || type_id === NTYPE.NEW_INCIDENT) {
+            router.push("/(incidents)" as any);
+        } else if (
+            type_id === NTYPE.QUOTA_PUBLISHED ||
+            type_id === NTYPE.QUOTA_REJECTED ||
+            type_id === NTYPE.QUOTA_VALIDATED
+        ) {
+            router.push("/(finance)/recipes" as any);
+        } else if (type_id === NTYPE.NEW_EXPENSE) {
+            router.push("/(finance)/expenses" as any);
+        } else if (type_id === NTYPE.NEW_RECEIPT) {
+            router.push("/(finance)/admin-recipes" as any);
+        }
     };
 
     const handleDeleteAll = () => {
@@ -374,7 +392,7 @@ export default function NotificationsScreen() {
                             return (
                                 <NotificationCard
                                     item={item.data!}
-                                    onPress={handleCardPress}
+                                    onPress={(id) => handleCardPress(id, item.data!)}
                                     onDelete={deleteNotification}
                                 />
                             );

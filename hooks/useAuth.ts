@@ -1,3 +1,4 @@
+// hooks/useAuth.ts
 import supabase from "@/lib/supabase";
 import * as SecureStore from "expo-secure-store";
 import { useState } from "react";
@@ -18,7 +19,8 @@ export interface AuthUser {
     rol_id: number;
 }
 
-// Hook principal
+const API_BASE_URL = "https://adi-web.onrender.com";
+
 export function useAuth() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,6 @@ export function useAuth() {
                 return null;
             }
 
-            // Guardar token e info de sesión de forma segura
             await SecureStore.setItemAsync("token", String(user.id));
             await SecureStore.setItemAsync("session_user", JSON.stringify(user));
 
@@ -59,23 +60,49 @@ export function useAuth() {
         }
     };
 
-    // Forgot password
-    // TODO: implementar cuando el flujo de reset esté definido en Supabase
-    const forgotPassword = async (_email: string): Promise<boolean> => {
+    // ── Forgot Password — conectado al backend real ──────────────────────────
+    const forgotPassword = async (email: string): Promise<boolean> => {
         setIsLoading(true);
         setError(null);
 
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/forgot-password`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email }),
+            });
 
-        setIsLoading(false);
-        return true;
+            const data = await response.json();
+
+            if (!response.ok) {
+                // El backend retorna 500 si el servicio de correo no está configurado
+                if (response.status === 500) {
+                    setError("El servicio de correo no está disponible.");
+                    return false;
+                }
+                setError(data?.message ?? "No se pudo procesar la solicitud.");
+                return false;
+            }
+
+            // El backend siempre retorna success: true (respuesta neutra por seguridad)
+            // aunque el correo no exista — esto es intencional para no exponer emails
+            return data?.success === true;
+
+        } catch (e: any) {
+            console.error("[ForgotPassword] Network error:", e?.message);
+            setError("No se pudo conectar al servidor. Verifica tu conexión.");
+            return false;
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     // Logout
     const logout = async () => {
         await SecureStore.deleteItemAsync("token");
         await SecureStore.deleteItemAsync("session_user");
-        // El componente que llame a logout debe hacer router.replace("/login")
     };
 
     const clearError = () => setError(null);
