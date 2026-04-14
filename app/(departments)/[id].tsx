@@ -204,7 +204,7 @@ function CreateUserModal({
                         <InputField
                             theme="light" label="Nombre(s)" placeholder="Ej. María"
                             leftIcon="person-outline" value={name}
-                            onChangeText={t => { setName(t); clearFieldError("name"); }}
+                            onChangeText={t => { setName(t.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'\-]/g, "")); clearFieldError("name"); }}
                             error={fieldErrors.name} maxLength={50} autoCapitalize="words"
                         />
 
@@ -213,7 +213,7 @@ function CreateUserModal({
                                 <InputField
                                     theme="light" label="Ap. Paterno" placeholder="Pérez"
                                     leftIcon="person-outline" value={ap}
-                                    onChangeText={t => { setAp(t); clearFieldError("ap"); }}
+                                    onChangeText={t => { setAp(t.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'\-]/g, "")); clearFieldError("ap"); }}
                                     error={fieldErrors.ap} maxLength={40} autoCapitalize="words"
                                 />
                             </View>
@@ -221,7 +221,7 @@ function CreateUserModal({
                                 <InputField
                                     theme="light" label="Ap. Materno" placeholder="López (opc.)"
                                     leftIcon="person-outline" value={am}
-                                    onChangeText={setAm} maxLength={40} autoCapitalize="words"
+                                    onChangeText={t => setAm(t.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'\-]/g, ""))} maxLength={40} autoCapitalize="words"
                                 />
                             </View>
                         </View>

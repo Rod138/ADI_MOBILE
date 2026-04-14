@@ -210,6 +210,7 @@ export default function DepartmentsScreen() {
                         placeholderTextColor={Colors.screen.textMuted}
                         value={search}
                         onChangeText={setSearch}
+                        maxLength={4}
                     />
                     {search.length > 0 && (
                         <TouchableOpacity onPress={() => setSearch("")}>

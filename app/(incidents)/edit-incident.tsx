@@ -172,6 +172,7 @@ export default function EditIncidentScreen() {
         const e: typeof fieldErrors = {};
         if (!description.trim()) e.description = "La descripción es obligatoria.";
         else if (description.trim().length < 10) e.description = "Mínimo 10 caracteres.";
+        else if (description.trim().length > 100) e.description = "Máximo 100 caracteres.";
         if (!areaId) e.area = "Selecciona un área.";
         if (!typeId) e.type = "Selecciona el tipo de incidencia.";
         setFieldErrors(e);
@@ -289,7 +290,7 @@ export default function EditIncidentScreen() {
                             }}
                             onFocus={() => setDescFocused(true)}
                             onBlur={() => setDescFocused(false)}
-                            maxLength={500}
+                            maxLength={100}
                         />
                     </View>
                     {fieldErrors.description && (
@@ -454,9 +455,9 @@ const modal = StyleSheet.create({
     actions: { flexDirection: "row", gap: 12, width: "100%", marginTop: 4 },
     btn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center" },
     btnCancel: { backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border },
-    btnConfirm: { backgroundColor: Colors.primary.main },
-    btnCancelText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
-    btnConfirmText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: Colors.white },
+    btnConfirm: { backgroundColor: Colors.status.success },
+    btnCancelText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: "#525252" },
+    btnConfirmText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: "#FFFFFF" },
 });
 
 const styles = StyleSheet.create({

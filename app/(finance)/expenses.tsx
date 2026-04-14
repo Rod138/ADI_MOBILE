@@ -196,8 +196,8 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
             e.description = "El asunto del gasto es obligatorio.";
         else if (description.trim().length < 5)
             e.description = "Mínimo 5 caracteres.";
-        else if (description.trim().length > 120)
-            e.description = "Máximo 120 caracteres.";
+        else if (description.trim().length > 30)
+            e.description = "Máximo 30 caracteres.";
 
         if (!amount.trim()) {
             e.amount = "Introduce el monto del gasto.";
@@ -277,7 +277,7 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
                     setErrors(p => ({ ...p, description: undefined }));
                 }}
                 error={errors.description}
-                maxLength={120}
+                maxLength={30}
             />
 
             <InputField

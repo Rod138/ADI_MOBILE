@@ -4,9 +4,9 @@ import { useSession } from "@/context/AuthContext";
 import { useCatalogs, useIncidents } from "@/hooks/useIncidents";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator, Animated, Dimensions, FlatList,
+    ActivityIndicator, Alert, Animated, Dimensions, FlatList,
     Platform, Pressable, ScrollView, StatusBar, StyleSheet,
     Text, TouchableOpacity, View,
 } from "react-native";
@@ -18,7 +18,7 @@ const DRAWER_WIDTH = SCREEN_WIDTH * 0.75;
 export default function IncidentsScreen() {
     const { user } = useSession();
     const { areas, statuses, catalogsLoading } = useCatalogs();
-    const { incidents, isLoading, error, fetchIncidents } = useIncidents();
+    const { incidents, isLoading, error, fetchIncidents, deleteIncident } = useIncidents();
 
     const [activeStatusId, setActiveStatusId] = useState<number | undefined>();
     const [activeAreaId, setActiveAreaId] = useState<number | undefined>();
@@ -44,6 +44,23 @@ export default function IncidentsScreen() {
     };
     const selectArea = (id?: number) => { setActiveAreaId(id); closeDrawer(); };
     const activeAreaName = areas.find((a) => a.id === activeAreaId)?.name;
+
+    const handleDelete = useCallback((inc: typeof incidents[0]) => {
+        Alert.alert(
+            "Eliminar incidencia",
+            "¿Estas seguro de que deseas eliminar esta incidencia? Esta acción no se puede deshacer.",
+            [
+                { text: "Cancelar", style: "cancel" },
+                {
+                    text: "Eliminar",
+                    style: "destructive",
+                    onPress: async () => {
+                        await deleteIncident(inc.id);
+                    },
+                },
+            ]
+        );
+    }, [deleteIncident]);
 
     return (
         <View style={styles.root}>
@@ -185,6 +202,7 @@ export default function IncidentsScreen() {
                                         params: { data: JSON.stringify(inc) },
                                     } as any)
                                 }
+                                onDelete={handleDelete}
                             />
                         )}
                         contentContainerStyle={styles.list}

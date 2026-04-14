@@ -614,7 +614,7 @@ export default function AdminIncidentScreen() {
                             </View>
                         </View>
                         <TouchableOpacity
-                            style={[cm.btn, cm.btnConfirm, { width: "100%" }]}
+                            style={[cm.btn, cm.btnConfirm, { width: "100%", flex: 0 }]}
                             onPress={() => { setShowSuccess(false); router.back(); }}
                         >
                             <Text style={cm.btnConfirmText}>Volver a incidencias</Text>
@@ -864,9 +864,9 @@ const cm = StyleSheet.create({
     actions: { flexDirection: "row", gap: 12, width: "100%", marginTop: 4 },
     btn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: "center" },
     btnCancel: { backgroundColor: Colors.screen.bg, borderWidth: 1, borderColor: Colors.screen.border },
-    btnConfirm: { backgroundColor: Colors.primary.main },
-    btnCancelText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textSecondary },
-    btnConfirmText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: Colors.white },
+    btnConfirm: { backgroundColor: Colors.status.success },
+    btnCancelText: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: "#525252" },
+    btnConfirmText: { fontFamily: "Outfit_700Bold", fontSize: 14, color: "#FFFFFF" },
 });
 
 // Timeline styles

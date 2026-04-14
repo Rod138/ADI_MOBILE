@@ -574,7 +574,7 @@ export default function AdminQuotaScreen() {
                                             <Ionicons name="cash-outline" size={18} color={Colors.status.success} />
                                         </View>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={styles.cardTitle}>{existingQuota ? "Editar cuota" : "Nueva cuota"}</Text>
+                                            <Text style={styles.cardTitle}>{existingQuota ? "Cuota establecida" : "Nueva cuota"}</Text>
                                             <Text style={styles.cardSubtitle}>
                                                 {selectedMonth} {selectedYear}
                                                 {existingQuota ? ` · Actual: ${formatCurrency(existingQuota.amount)}` : " · Sin registrar"}
@@ -591,14 +591,17 @@ export default function AdminQuotaScreen() {
                                         leftIcon="cash-outline" keyboardType="decimal-pad" maxLength={8}
                                         value={amount}
                                         onChangeText={t => { setAmount(t.replace(/[^0-9.]/g, "")); setAmountError(undefined); }}
-                                        error={amountError} />
-                                    {saving ? (
-                                        <View style={styles.loadingRow}>
-                                            <ActivityIndicator size="small" color={Colors.primary.main} />
-                                            <Text style={styles.loadingText}>Guardando cuota...</Text>
-                                        </View>
-                                    ) : (
-                                        <PrimaryButton label={existingQuota ? "Actualizar cuota" : "Registrar cuota"} onPress={handleSave} disabled={saving} />
+                                        error={amountError}
+                                        editable={!existingQuota} />
+                                    {!existingQuota && (
+                                        saving ? (
+                                            <View style={styles.loadingRow}>
+                                                <ActivityIndicator size="small" color={Colors.primary.main} />
+                                                <Text style={styles.loadingText}>Guardando cuota...</Text>
+                                            </View>
+                                        ) : (
+                                            <PrimaryButton label="Registrar cuota" onPress={handleSave} disabled={saving} />
+                                        )
                                     )}
                                 </View>
                             ) : fundConfigured ? (

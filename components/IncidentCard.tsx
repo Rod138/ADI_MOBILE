@@ -57,6 +57,7 @@ interface IncidentCardProps {
     onPress?: (item: Incident) => void;
     onEdit?: (item: Incident) => void;
     onAdminEdit?: (item: Incident) => void; // Panel admin
+    onDelete?: (item: Incident) => void;   // Eliminar (solo dueño dentro ventana)
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
@@ -68,6 +69,7 @@ export default function IncidentCard({
     onPress,
     onEdit,
     onAdminEdit,
+    onDelete,
 }: IncidentCardProps) {
     const reportedBy = item.users
         ? `${item.users.name} ${item.users.ap}${item.users.am ? " " + item.users.am : ""}`.trim()
@@ -75,13 +77,15 @@ export default function IncidentCard({
     const statusName = item.inc_status?.name ?? "—";
     const ss = getStatusStyle(statusName);
     const { date, time } = formatDateTime(item.created_at);
-    const isOwner = currentUserId !== undefined && item.usr_id === currentUserId;
+    const isOwner = currentUserId !== undefined && Number(item.usr_id) === Number(currentUserId);
     const isAdmin = currentUserRole >= 3;
 
-    const isPending = (item.inc_status?.name ?? "").toLowerCase().includes("pend");
-    const withinEditWindow = Date.now() - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000;
+    const statusLower = (item.inc_status?.name ?? "").toLowerCase();
+    const isPending = statusLower.includes("pend") || (!statusLower.includes("resuel") && !statusLower.includes("cerr") && !statusLower.includes("complet"));
+    const withinEditWindow = Date.now() - new Date(item.created_at).getTime() < 24 * 60 * 60 * 1000; // 24 horas
     const showEditBtn = isOwner && onEdit && withinEditWindow && isPending;
     const showAdminBtn = isAdmin && onAdminEdit;
+    const showDeleteBtn = isOwner && onDelete && withinEditWindow && isPending;
 
     const editedLabel = item.edited_at
         ? (() => {
@@ -175,15 +179,25 @@ export default function IncidentCard({
                             </TouchableOpacity>
                         )}
 
-                        {/* Owner: botón Editar (solo si no es admin) */}
-                        {showEditBtn && !isAdmin && (
+                        {/* Owner: botón Editar */}
+                        {showEditBtn && (
                             <TouchableOpacity
                                 style={styles.editBtn}
                                 onPress={(e) => { e.stopPropagation?.(); onEdit!(item); }}
                                 activeOpacity={0.75}
                             >
-                                <Ionicons name="pencil" size={12} color={Colors.primary.dark} />
-                                <Text style={styles.editBtnText}>Editar</Text>
+                                <Ionicons name="pencil" size={14} color={Colors.primary.dark} />
+                            </TouchableOpacity>
+                        )}
+
+                        {/* Owner: botón Eliminar (solo dueño, pendiente, dentro de 24h) */}
+                        {showDeleteBtn && (
+                            <TouchableOpacity
+                                style={styles.deleteBtn}
+                                onPress={(e) => { e.stopPropagation?.(); onDelete!(item); }}
+                                activeOpacity={0.75}
+                            >
+                                <Ionicons name="trash-outline" size={14} color={Colors.status.error} />
                             </TouchableOpacity>
                         )}
 
@@ -263,13 +277,19 @@ const styles = StyleSheet.create({
     },
     adminBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.dark },
 
-    // Edit button — igual que antes
+    // Edit button (minimalist icon)
     editBtn: {
-        flexDirection: "row", alignItems: "center", gap: 5,
-        paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+        width: 28, height: 28, borderRadius: 8,
+        alignItems: "center", justifyContent: "center",
         backgroundColor: Colors.primary.soft, borderWidth: 1, borderColor: Colors.primary.muted,
     },
-    editBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.primary.dark },
+
+    // Delete button (minimalist icon)
+    deleteBtn: {
+        width: 28, height: 28, borderRadius: 8,
+        alignItems: "center", justifyContent: "center",
+        backgroundColor: Colors.status.errorBg, borderWidth: 1, borderColor: Colors.status.errorBorder,
+    },
 
     detailHint: { flexDirection: "row", alignItems: "center", gap: 2 },
     detailHintText: { fontFamily: "Outfit_500Medium", fontSize: 11, color: Colors.primary.main },
