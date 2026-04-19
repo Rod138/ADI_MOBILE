@@ -173,7 +173,7 @@ export default function HomeScreen() {
                     <ModuleCard
                         title="Incidencias"
                         subtitle="Gestión de reportes"
-                        description="Reporta, revisa y da seguimiento a los problemas del condominio. Adjunta imágenes y recibe actualizaciones en tiempo real."
+                        description="Reporta, revisa y da seguimiento a los problemas de la torre. Adjunta imágenes y recibe actualizaciones en tiempo real."
                         icon="warning-outline"
                         accentColor={Colors.primary.main}
                         accentBg={Colors.primary.soft}
@@ -184,7 +184,7 @@ export default function HomeScreen() {
                     <ModuleCard
                         title="Gestión Financiera"
                         subtitle="Contabilidad y pagos"
-                        description="Consulta el estado de cuenta del condominio, cuotas de mantenimiento, gastos y reportes financieros."
+                        description="Consulta el estado de cuenta de la torre, cuotas de mantenimiento, gastos y reportes financieros."
                         icon="wallet-outline"
                         accentColor={Colors.secondary.main}
                         accentBg={Colors.secondary.soft}
@@ -192,16 +192,18 @@ export default function HomeScreen() {
                         onPress={() => router.push("/(finance)" as any)}
                     />
 
-                    <ModuleCard
-                        title="Departamentos"
-                        subtitle="Gestión de departamentos"
-                        description="Consulta el estado de cuenta del condominio, cuotas de mantenimiento, gastos y reportes financieros."
-                        icon="home-outline"
-                        accentColor={Colors.secondary.main}
-                        accentBg={Colors.secondary.soft}
-                        accentBorder="#FED7AA"
-                        onPress={() => router.push("/(departments)" as any)}
-                    />
+                    {(user?.rol_id ?? 0) >= 2 && (
+                        <ModuleCard
+                            title="Departamentos"
+                            subtitle="Gestión de departamentos"
+                            description="Consulta el estado de cuenta de la torre, cuotas de mantenimiento, gastos y reportes financieros."
+                            icon="home-outline"
+                            accentColor={Colors.secondary.main}
+                            accentBg={Colors.secondary.soft}
+                            accentBorder="#FED7AA"
+                            onPress={() => router.push("/(departments)" as any)}
+                        />
+                    )}
 
                     {/* Footer info */}
                     <View style={styles.footerInfo}>

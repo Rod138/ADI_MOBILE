@@ -340,7 +340,7 @@ export default function BalanceScreen() {
                     </TouchableOpacity>
                     <View style={{ flex: 1 }}>
                         <Text style={styles.headerTitle}>Estado de cuenta</Text>
-                        <Text style={styles.headerSubtitle}>Balance general del condominio</Text>
+                        <Text style={styles.headerSubtitle}>Balance general de la torre</Text>
                     </View>
                     <TouchableOpacity
                         style={[styles.periodBtn, fundLoading && { opacity: 0.6 }]}

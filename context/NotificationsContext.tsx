@@ -71,7 +71,7 @@ export function NotificationsProvider({
     const unreadCount = notifications.filter(isUnread).length;
 
     // ── Fetch ─────────────────────────────────────────────────────────────────
-    const fetchNotifications = useCallback(async () => {
+    const fetchNotifications = useCallback(async (retries = 1) => {
         if (!userId) {
             setNotifications([]);
             return;
@@ -81,8 +81,6 @@ export function NotificationsProvider({
         setError(null);
 
         try {
-            // Query simple sin join — evita errores si notification_types no está configurada.
-            // El type_id se usa solo para estilos visuales en el cliente, no requiere join.
             const { data, error: dbError } = await supabase
                 .from("notifications")
                 .select("id, title, description, type_id, usr_id, created_at, read")
@@ -92,10 +90,9 @@ export function NotificationsProvider({
             if (dbError) {
                 console.error("[Notifications] Supabase error:", dbError.message, dbError.details);
 
-                // Si el error es que la columna "read" no existe, hacemos el query sin ella
                 if (
                     dbError.message?.includes("read") ||
-                    dbError.code === "42703" // column does not exist
+                    dbError.code === "42703"
                 ) {
                     const { data: fallbackData, error: fallbackError } = await supabase
                         .from("notifications")
@@ -109,7 +106,6 @@ export function NotificationsProvider({
                         return;
                     }
 
-                    // Marcar todas como no leídas (read no existe en BD aún)
                     const list = (fallbackData ?? []).map((n: any) => ({ ...n, read: false }));
                     setNotifications(list as Notification[]);
                     return;
@@ -121,12 +117,16 @@ export function NotificationsProvider({
 
             const list = (data ?? []).map((n: any) => ({
                 ...n,
-                // Si read es null (BD tiene el campo pero valor null), tratar como no leído
                 read: n.read === true,
             }));
 
             setNotifications(list as Notification[]);
         } catch (e: any) {
+            if (retries > 0) {
+                // Espera 2s y reintenta una vez silenciosamente
+                setTimeout(() => fetchNotifications(0), 2000);
+                return;
+            }
             console.error("[Notifications] Unexpected error:", e?.message);
             setError("No se pudo conectar al servidor.");
         } finally {

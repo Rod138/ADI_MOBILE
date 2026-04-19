@@ -88,7 +88,12 @@ export default function CreateIncidentScreen() {
     const [showConfirm, setShowConfirm] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [descFocused, setDescFocused] = useState(false);
-    const [fieldErrors, setFieldErrors] = useState<{ description?: string; area?: string; type?: string }>({});
+    const [fieldErrors, setFieldErrors] = useState<{
+        description?: string;
+        area?: string;
+        type?: string;
+        image?: string; // ← nuevo
+    }>({});
 
     const filteredTypes = areaId ? types.filter((t) => t.area_id === null || t.area_id === areaId) : types;
 
@@ -101,6 +106,7 @@ export default function CreateIncidentScreen() {
         if (!description.trim()) e.description = "La descripción es obligatoria.";
         else if (description.trim().length < 10) e.description = "Mínimo 10 caracteres.";
         else if (description.trim().length > 100) e.description = "Máximo 100 caracteres.";
+        if (!imageUri) e.image = "La imagen es obligatoria."; // ← nuevo
         if (!areaId) e.area = "Selecciona un área.";
         if (!typeId) e.type = "Selecciona el tipo de incidencia.";
         setFieldErrors(e);
@@ -111,14 +117,22 @@ export default function CreateIncidentScreen() {
         const p = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!p.granted) { Alert.alert("Permiso requerido", "Necesitamos acceso a tu galería."); return; }
         const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.8 });
-        if (!r.canceled && r.assets[0]) setImageUri(r.assets[0].uri);
+        if (!r.canceled && r.assets[0]) {
+            setImageUri(r.assets[0].uri);
+            setFieldErrors(p => ({ ...p, image: undefined })); // ← limpiar error
+        }
     };
+
     const takePhoto = async () => {
         const p = await ImagePicker.requestCameraPermissionsAsync();
         if (!p.granted) { Alert.alert("Permiso requerido", "Necesitamos acceso a tu cámara."); return; }
         const r = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.8 });
-        if (!r.canceled && r.assets[0]) setImageUri(r.assets[0].uri);
+        if (!r.canceled && r.assets[0]) {
+            setImageUri(r.assets[0].uri);
+            setFieldErrors(p => ({ ...p, image: undefined })); // ← limpiar error
+        }
     };
+
     const showImageOptions = () => Alert.alert("Adjuntar imagen", "¿Cómo deseas agregar la imagen?", [
         { text: "Cámara", onPress: takePhoto },
         { text: "Galería", onPress: pickImage },
@@ -204,7 +218,7 @@ export default function CreateIncidentScreen() {
                             )}
                         </View>
 
-                        {/* Imagen */}
+                        {/* Imagen — ahora obligatoria */}
                         <View style={styles.field}>
                             <Text style={styles.fieldLabel}>IMAGEN</Text>
                             {imageUri ? (
@@ -215,11 +229,25 @@ export default function CreateIncidentScreen() {
                                     </TouchableOpacity>
                                 </View>
                             ) : (
-                                <TouchableOpacity style={styles.imagePicker} onPress={showImageOptions} activeOpacity={0.8}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.imagePicker,
+                                        fieldErrors.image && styles.textAreaError, // ← borde rojo si falta
+                                    ]}
+                                    onPress={showImageOptions}
+                                    activeOpacity={0.8}
+                                >
                                     <Ionicons name="camera-outline" size={26} color={Colors.screen.iconMuted} />
                                     <Text style={styles.imagePickerText}>Toca para adjuntar una foto</Text>
-                                    <Text style={styles.imagePickerHint}>Opcional</Text>
+                                    {/* "Opcional" eliminado */}
                                 </TouchableOpacity>
+                            )}
+                            {/* Mensaje de error de imagen */}
+                            {fieldErrors.image && (
+                                <View style={styles.errorRow}>
+                                    <Ionicons name="alert-circle-outline" size={12} color={Colors.status.error} />
+                                    <Text style={styles.errorText}>{fieldErrors.image}</Text>
+                                </View>
                             )}
                         </View>
 
@@ -388,7 +416,6 @@ const styles = StyleSheet.create({
         alignItems: "center", justifyContent: "center", gap: 6,
     },
     imagePickerText: { fontFamily: "Outfit_500Medium", fontSize: 13, color: Colors.screen.textSecondary },
-    imagePickerHint: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted },
     imagePreview: { width: "100%", height: 180, borderRadius: 12 },
     removeImage: { position: "absolute", top: 8, right: 8, backgroundColor: "rgba(255,255,255,0.9)", borderRadius: 12 },
     costRow: {

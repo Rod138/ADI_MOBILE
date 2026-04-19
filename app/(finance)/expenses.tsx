@@ -262,7 +262,7 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
                 </View>
                 <View>
                     <Text style={form.headerTitle}>Registrar gasto</Text>
-                    <Text style={form.headerSubtitle}>Gastos del condominio</Text>
+                    <Text style={form.headerSubtitle}>Gastos de la torre</Text>
                 </View>
             </View>
 
@@ -417,7 +417,7 @@ function ReadOnlyNotice() {
                 <Ionicons name="eye-outline" size={16} color={Colors.primary.dark} />
             </View>
             <Text style={notice.text}>
-                Estás viendo los gastos del condominio. Solo administradores y tesoreros pueden registrar o eliminar gastos.
+                Estás viendo los gastos de la torre. Solo administradores y tesoreros pueden registrar o eliminar gastos.
             </Text>
         </View>
     );
@@ -497,7 +497,7 @@ export default function ExpensesScreen() {
                             />
                         </TouchableOpacity>
                         <View>
-                            <Text style={styles.headerTitle}>Gastos del condominio</Text>
+                            <Text style={styles.headerTitle}>Gastos de la torre</Text>
                             <Text style={styles.headerSubtitle}>
                                 {canManage ? "Egresos registrados" : "Consulta de egresos"}
                             </Text>

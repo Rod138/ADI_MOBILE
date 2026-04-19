@@ -116,7 +116,7 @@ export default function FinanceScreen() {
                     <ModuleCard
                         icon="bar-chart-outline"
                         title="Estado de cuenta"
-                        description="Balance general del condominio con ingresos, egresos y saldo disponible."
+                        description="Balance general de la torre con ingresos, egresos y saldo disponible."
                         accentColor="#7C3AED"
                         accentBg="#F5F3FF"
                         accentBorder="#DDD6FE"
@@ -127,7 +127,7 @@ export default function FinanceScreen() {
                     <ModuleCard
                         icon="receipt-outline"
                         title="Mis cuotas"
-                        description="Consulta y sube el comprobante de tu cuota de mantenimiento del mes actual."
+                        description="Consulta y sube el comprobante de tu cuota mensual."
                         accentColor={Colors.primary.main}
                         accentBg={Colors.primary.soft}
                         accentBorder={Colors.primary.muted}
@@ -137,10 +137,10 @@ export default function FinanceScreen() {
                     {/* Gastos del condominio */}
                     <ModuleCard
                         icon="trending-down-outline"
-                        title="Gastos del condominio"
+                        title="Gastos de la torre"
                         description={
                             canManage
-                                ? "Registra y consulta los egresos del condominio con evidencia fotográfica."
+                                ? "Registra y consulta los egresos de la torre con evidencia fotográfica."
                                 : "Consulta los egresos registrados por la administración."
                         }
                         accentColor={Colors.secondary.main}
