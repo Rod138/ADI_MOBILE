@@ -10,6 +10,7 @@ export interface ChangePasswordErrors {
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const VALID_PASSWORD_REGEX = /^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ0-9!@#$%^&*()_\-+=\[\]{};:'",.<>?/\\|`~]+$/;
 
 export const MAX_PASSWORD_LENGTH = 32;
 export const MAX_CHANGE_PASSWORD_LENGTH = 16;
@@ -49,6 +50,7 @@ export function validateNewPassword(
     if (!newPassword) return "Ingresa la nueva contraseña.";
     if (newPassword.length < MIN_PASSWORD_LENGTH) return `Mínimo ${MIN_PASSWORD_LENGTH} caracteres.`;
     if (newPassword.length > MAX_CHANGE_PASSWORD_LENGTH) return `Máximo ${MAX_CHANGE_PASSWORD_LENGTH} caracteres.`;
+    if (!VALID_PASSWORD_REGEX.test(newPassword)) return "La contraseña solo puede contener letras, números y símbolos del teclado estándar.";
     if (newPassword === currentPassword) return "La nueva contraseña debe ser diferente a la actual.";
     return undefined;
 }
