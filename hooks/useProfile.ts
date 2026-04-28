@@ -3,6 +3,7 @@ import { useState } from "react";
 
 export interface UpdatePasswordPayload {
     userId: number;
+    currentPassword: string;
     newPassword: string;
 }
 
@@ -26,11 +27,29 @@ export function useProfile() {
 
     // ── Cambiar contraseña ─────────────────────
     // TODO: migrar a hash cuando esté listo
-    const updatePassword = async ({ userId, newPassword }: UpdatePasswordPayload): Promise<boolean> => {
+    const updatePassword = async ({ userId, currentPassword, newPassword }: UpdatePasswordPayload): Promise<boolean> => {
         setIsLoading(true);
         clearMessages();
 
         try {
+            // 1. Verificar que la contraseña actual sea correcta
+            const { data: userRecord, error: fetchError } = await supabase
+                .from("users")
+                .select("password")
+                .eq("id", userId)
+                .single();
+
+            if (fetchError || !userRecord) {
+                setError("No se pudo verificar tu identidad.");
+                return false;
+            }
+
+            if (userRecord.password !== currentPassword) {
+                setError("La contraseña actual es incorrecta.");
+                return false;
+            }
+
+            // 2. Actualizar con la nueva contraseña
             const { error: dbError } = await supabase
                 .from("users")
                 .update({ password: newPassword })

@@ -30,7 +30,7 @@ export default function ChangePasswordScreen() {
         const errors = validateChangePasswordForm(current, newPass, confirm);
         setFieldErrors(errors);
         if (!isChangePasswordFormValid(errors)) return;
-        const ok = await updatePassword({ userId: user!.id, newPassword: newPass });
+        const ok = await updatePassword({ userId: user!.id, currentPassword: current, newPassword: newPass });
         if (ok) {
             setCurrent(""); setNewPass(""); setConfirm("");
             setFieldErrors({});
