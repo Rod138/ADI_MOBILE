@@ -98,11 +98,12 @@ export default function IncidentDetailScreen() {
     }
 
     const reportedBy = incident.users
-        ? `${incident.users.name} ${incident.users.ap}${incident.users.am ? " " + incident.users.am : ""}`.trim()
+        ? `${incident.users.name}${incident.users.departments?.name ? " · " + incident.users.departments.name : ""}`.trim()
         : "—";
     const statusName = incident.inc_status?.name ?? "—";
     const ss = getStatusStyle(statusName);
-    const initials = reportedBy.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+    const initials = (incident.users?.name ?? "?")
+        .split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
     const hasDates = incident.edited_at || incident.completed_at || incident.closed_at;
 

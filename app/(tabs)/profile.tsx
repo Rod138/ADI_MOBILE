@@ -89,7 +89,7 @@ export default function ProfileScreen() {
                     <View style={styles.avatarWrapper}>
                         <View style={styles.avatarRing}>
                             <Text style={styles.avatarInitials}>
-                                {user ? `${user.name[0]}${user.ap[0]}`.toUpperCase() : "?"}
+                                {user ? `${user.name[0]}`.toUpperCase() : "?"}
                             </Text>
                         </View>
                         {/* Online dot */}

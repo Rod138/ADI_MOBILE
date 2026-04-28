@@ -4,8 +4,6 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 export interface SessionUser {
     id: number;
     name: string;
-    ap: string;
-    am: string;
     email: string;
     phone: string;
     dep_id: number;
@@ -47,9 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         else await SecureStore.deleteItemAsync("session_user");
     };
 
-    const fullName = user
-        ? `${user.name} ${user.ap}${user.am ? " " + user.am : ""}`.trim()
-        : "";
+    const fullName = user ? user.name : "";
 
     return (
         <AuthContext.Provider value={{ user, setUser, fullName, isLoading }}>

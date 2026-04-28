@@ -27,16 +27,15 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[0-9]{10}$/;
 
 interface FormErrors {
-    name?: string; ap?: string;
+    name?: string;
     email?: string; phone?: string; password?: string;
 }
 
 function validateForm(f: {
-    name: string; ap: string; email: string; phone: string; password: string;
+    name: string; email: string; phone: string; password: string;
 }): FormErrors {
     const errors: FormErrors = {};
     if (!f.name.trim()) errors.name = "El nombre es obligatorio.";
-    if (!f.ap.trim()) errors.ap = "El apellido paterno es obligatorio.";
     if (!f.email.trim()) errors.email = "El correo es obligatorio.";
     else if (!EMAIL_REGEX.test(f.email.trim())) errors.email = "Correo no válido.";
     if (!f.phone.trim()) errors.phone = "El teléfono es obligatorio.";
@@ -70,7 +69,7 @@ function getRolColor(rolId: number): { color: string; bg: string; border: string
 // ── Tarjeta de usuario ────────────────────────────────────────────────────────
 
 function UserCard({ user, onDelete }: { user: DeptUser; onDelete: (u: DeptUser) => void }) {
-    const initials = `${user.name[0] ?? ""}${user.ap[0] ?? ""}`.toUpperCase();
+    const initials = `${user.name[0] ?? ""}`.toUpperCase();
     const rolColor = getRolColor(user.rol_id);
 
     return (
@@ -80,7 +79,7 @@ function UserCard({ user, onDelete }: { user: DeptUser; onDelete: (u: DeptUser) 
             </View>
             <View style={cardStyles.info}>
                 <Text style={cardStyles.userName} numberOfLines={1}>
-                    {user.name} {user.ap}{user.am ? ` ${user.am}` : ""}
+                    {user.name}
                 </Text>
                 {/* Rol badge */}
                 <View style={[cardStyles.rolPill, { backgroundColor: rolColor.bg, borderColor: rolColor.border }]}>
@@ -123,8 +122,6 @@ function CreateUserModal({
     createUser, isLoading, error, success, clearMessages,
 }: CreateModalProps) {
     const [name, setName] = useState("");
-    const [ap, setAp] = useState("");
-    const [am, setAm] = useState("");
     const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
     const [password, setPassword] = useState("");
@@ -145,7 +142,7 @@ function CreateUserModal({
     }, [visible]);
 
     const resetForm = () => {
-        setName(""); setAp(""); setAm(""); setEmail("");
+        setName(""); setEmail("");
         setPhone(""); setPassword(""); setFieldErrors({});
         clearMessages();
     };
@@ -157,12 +154,12 @@ function CreateUserModal({
 
     const handleSubmit = async () => {
         Keyboard.dismiss();
-        const errors = validateForm({ name, ap, email, phone, password });
+        const errors = validateForm({ name, email, phone, password });
         setFieldErrors(errors);
         if (Object.values(errors).some(Boolean)) return;
 
         const ok = await createUser({
-            name: name.trim(), ap: ap.trim(), am: am.trim(),
+            name: name.trim(),
             email: email.trim().toLowerCase(),
             phone: phone.trim(), password: password.trim(),
             dep_id: depId, rol_id: 1,
@@ -207,24 +204,6 @@ function CreateUserModal({
                             onChangeText={t => { setName(t.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'\-]/g, "")); clearFieldError("name"); }}
                             error={fieldErrors.name} maxLength={50} autoCapitalize="words"
                         />
-
-                        <View style={modalStyles.rowInputs}>
-                            <View style={{ flex: 1 }}>
-                                <InputField
-                                    theme="light" label="Ap. Paterno" placeholder="Pérez"
-                                    leftIcon="person-outline" value={ap}
-                                    onChangeText={t => { setAp(t.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'\-]/g, "")); clearFieldError("ap"); }}
-                                    error={fieldErrors.ap} maxLength={40} autoCapitalize="words"
-                                />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <InputField
-                                    theme="light" label="Ap. Materno" placeholder="López (opc.)"
-                                    leftIcon="person-outline" value={am}
-                                    onChangeText={t => setAm(t.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'\-]/g, ""))} maxLength={40} autoCapitalize="words"
-                                />
-                            </View>
-                        </View>
 
                         <InputField
                             theme="light" label="Correo electrónico" placeholder="correo@ejemplo.com"
@@ -306,8 +285,8 @@ export default function DeptDetailScreen() {
     const handleDelete = useCallback((user: DeptUser) => {
         const isLast = users.length === 1;
         const warningMsg = isLast
-            ? `¿Eliminar a ${user.name} ${user.ap}? Es el único usuario del depto. El departamento se marcará como desocupado automáticamente.`
-            : `¿Eliminar a ${user.name} ${user.ap}? Esta acción no se puede deshacer.`;
+            ? `¿Eliminar a ${user.name}? Es el único usuario del depto. El departamento se marcará como desocupado automáticamente.`
+            : `¿Eliminar a ${user.name}? Esta acción no se puede deshacer.`;
 
         Alert.alert("Eliminar usuario", warningMsg, [
             { text: "Cancelar", style: "cancel" },

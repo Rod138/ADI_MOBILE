@@ -32,7 +32,7 @@ export interface Incident {
     status_id: number;
     type_id: number;
     // joins
-    users: { name: string; ap: string; am: string } | null;
+    users: { name: string; dep_id: number; departments: { name: string } | null } | null;
     areas: { name: string } | null;
     inc_status: { name: string } | null;
     inc_types: { name: string } | null;
@@ -103,7 +103,7 @@ export function useIncidents() {
                 .from("incidents")
                 .select(`
                     *,
-                    users ( name, ap, am ),
+                    users ( name, dep_id, departments ( name ) ),
                     areas ( name ),
                     inc_status ( name ),
                     inc_types ( name )

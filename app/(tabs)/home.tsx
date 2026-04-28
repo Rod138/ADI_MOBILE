@@ -143,7 +143,7 @@ export default function HomeScreen() {
                         activeOpacity={0.8}
                     >
                         <Text style={styles.avatarBtnText}>
-                            {user ? `${user.name[0]}${user.ap[0]}`.toUpperCase() : "?"}
+                            {user ? `${user.name[0]}`.toUpperCase() : "?"}
                         </Text>
                     </TouchableOpacity>
                 </View>

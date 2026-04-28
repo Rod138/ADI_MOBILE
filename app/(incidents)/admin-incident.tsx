@@ -390,9 +390,10 @@ export default function AdminIncidentScreen() {
     }
 
     const reportedBy = incident.users
-        ? `${incident.users.name} ${incident.users.ap}`.trim()
+        ? `${incident.users.name}${incident.users.departments?.name ? " · " + incident.users.departments.name : ""}`.trim()
         : "—";
-    const initials = reportedBy.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+    const initials = (incident.users?.name ?? "?")
+        .split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
     const currentStatusKey = getStatusKey(incident.inc_status?.name ?? "");
     const currentStatusStyle = STATUS_STYLES[currentStatusKey];
 

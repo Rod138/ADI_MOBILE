@@ -72,7 +72,7 @@ export default function IncidentCard({
     onDelete,
 }: IncidentCardProps) {
     const reportedBy = item.users
-        ? `${item.users.name} ${item.users.ap}${item.users.am ? " " + item.users.am : ""}`.trim()
+        ? `${item.users.name}${item.users.departments?.name ? " · " + item.users.departments.name : ""}`.trim()
         : "—";
     const statusName = item.inc_status?.name ?? "—";
     const ss = getStatusStyle(statusName);
@@ -94,7 +94,7 @@ export default function IncidentCard({
         })()
         : null;
 
-    const initials = reportedBy
+    const initials = (item.users?.name ?? "?")
         .split(" ")
         .map((w) => w[0])
         .slice(0, 2)

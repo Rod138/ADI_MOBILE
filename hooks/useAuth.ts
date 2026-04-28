@@ -11,8 +11,6 @@ export interface LoginCredentials {
 export interface AuthUser {
     id: number;
     name: string;
-    ap: string;
-    am: string;
     email: string;
     phone: string;
     dep_id: number;
@@ -33,7 +31,7 @@ export function useAuth() {
         try {
             const { data: user, error: dbError } = await supabase
                 .from("users")
-                .select("id, name, ap, am, email, phone, dep_id, rol_id")
+                .select("id, name, email, phone, dep_id, rol_id")
                 .eq("email", credentials.email)
                 .eq("password", credentials.password)
                 .single();
