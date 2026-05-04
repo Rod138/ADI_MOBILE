@@ -12,6 +12,8 @@ export interface Department {
 export interface DeptUser {
     id: number;
     name: string;
+    ap: string;
+    am: string | null;
     email: string;
     phone: string;
     dep_id: number;
@@ -20,6 +22,8 @@ export interface DeptUser {
 
 export interface CreateUserPayload {
     name: string;
+    ap: string;
+    am?: string;
     email: string;
     phone: string;
     password: string;
@@ -65,7 +69,7 @@ export function useDepartments() {
         try {
             const { data, error: dbError } = await supabase
                 .from("users")
-                .select("id, name, email, phone, dep_id, rol_id")
+                .select("id, name, ap, am, email, phone, dep_id, rol_id")
                 .eq("dep_id", depId);
 
             if (dbError) { setError("Error al cargar los usuarios."); return; }
@@ -173,6 +177,8 @@ export function useDepartments() {
                 .insert([{
                     id: newId,
                     name: payload.name,
+                    ap: payload.ap,
+                    am: payload.am || null,
                     email: payload.email,
                     phone: payload.phone,
                     password: payload.password,
