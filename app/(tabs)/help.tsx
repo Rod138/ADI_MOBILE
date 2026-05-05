@@ -2,6 +2,7 @@ import { ScreenHeader, ScreenShell } from "@/components/ui";
 import { Colors } from "@/constants/colors";
 import { useFaqs, type FaqsByArea } from "@/hooks/useFaqs";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
     Animated,
@@ -277,9 +278,9 @@ export default function HelpScreen() {
         fetchFaqs();
     }, []);
 
-    // TODO: reemplazar con la ruta real de reporte cuando esté lista
+
     const handleReport = () => {
-        // router.push("/(help)/report-error" as any);
+        router.push("/(help)/report-error" as any);
     };
 
     return (
