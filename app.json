@@ -12,6 +12,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.xcorp.adi",
       "adaptiveIcon": {
         "backgroundColor": "#1C1C1C",
         "foregroundImage": "./assets/images/logo.png"
@@ -45,6 +46,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0925e9b2-1661-40ad-b717-52cb89584bb7"
+      }
     }
   }
 }
