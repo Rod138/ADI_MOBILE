@@ -4,11 +4,12 @@ import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
 import { useExpenses, type Expense } from "@/hooks/useExpenses";
 import { notifyNewExpense } from "@/hooks/useNotificationSender";
+import supabase from "@/lib/supabase";
 import { uploadFile } from "@/lib/cloudinary";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -25,6 +26,31 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+const MONTH_NAMES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+interface MonthEntry { month: string; year: number; key: string; }
+
+function buildMonthList(startDate: string | null): MonthEntry[] {
+    const now = new Date();
+    const result: MonthEntry[] = [];
+    const startFrom = startDate ? new Date(startDate) : now;
+    const startYear = startFrom.getFullYear();
+    const startMonth = startFrom.getMonth();
+    let y = now.getFullYear();
+    let m = now.getMonth();
+    while (y > startYear || (y === startYear && m >= startMonth)) {
+        const monthName = MONTH_NAMES[m];
+        result.push({ month: monthName, year: y, key: `${monthName}-${y}` });
+        m--;
+        if (m < 0) { m = 11; y--; }
+        if (result.length >= 60) break;
+    }
+    return result;
+}
 
 function formatDate(iso: string) {
     const d = new Date(iso);
@@ -261,7 +287,7 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
                     <Ionicons name="add-circle-outline" size={20} color={Colors.secondary.main} />
                 </View>
                 <View>
-                    <Text style={form.headerTitle}>Registrar gasto</Text>
+                    <Text style={form.headerTitle}>Levantar gasto</Text>
                     <Text style={form.headerSubtitle}>Gastos de la torre</Text>
                 </View>
             </View>
@@ -357,7 +383,7 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
                 </View>
             ) : (
                 <PrimaryButton
-                    label="Registrar gasto"
+                    label="Levantar gasto"
                     onPress={handleSubmit}
                     disabled={isLoading || uploading}
                     variant="orange"
@@ -369,13 +395,8 @@ function CreateForm({ onSuccess }: { onSuccess: () => void }) {
 
 // ── Summary Banner ────────────────────────────────────────────────────────────
 
-function SummaryBanner({ expenses, canManage }: { expenses: Expense[]; canManage: boolean }) {
+function SummaryBanner({ expenses }: { expenses: Expense[] }) {
     const total = expenses.reduce((acc, e) => acc + Number(e.amount), 0);
-    const thisMonth = expenses.filter(e => {
-        const d = new Date(e.expense_date);
-        const now = new Date();
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }).reduce((acc, e) => acc + Number(e.amount), 0);
 
     return (
         <View style={summary.root}>
@@ -384,16 +405,6 @@ function SummaryBanner({ expenses, canManage }: { expenses: Expense[]; canManage
                 <View>
                     <Text style={summary.label}>Total registrado</Text>
                     <Text style={summary.value}>{formatCurrency(total)}</Text>
-                </View>
-            </View>
-            <View style={summary.divider} />
-            <View style={summary.item}>
-                <Ionicons name="calendar-outline" size={18} color={Colors.primary.main} />
-                <View>
-                    <Text style={summary.label}>Este mes</Text>
-                    <Text style={[summary.value, { color: Colors.primary.dark }]}>
-                        {formatCurrency(thisMonth)}
-                    </Text>
                 </View>
             </View>
             <View style={summary.divider} />
@@ -417,7 +428,7 @@ function ReadOnlyNotice() {
                 <Ionicons name="eye-outline" size={16} color={Colors.primary.dark} />
             </View>
             <Text style={notice.text}>
-                Estás viendo los gastos de la torre. Solo administradores y tesoreros pueden registrar o eliminar gastos.
+                Estás viendo los gastos de la torre. Solo administradores y tesoreros pueden levantar o eliminar gastos.
             </Text>
         </View>
     );
@@ -433,12 +444,50 @@ export default function ExpensesScreen() {
     const [showForm, setShowForm] = useState(false);
     const formAnim = useRef(new Animated.Value(0)).current;
 
+    // ── Filtro General / Por mes ──────────────────────────────────────────────
+    type FilterMode = "general" | "month";
+    const [filterMode, setFilterMode] = useState<FilterMode>("general");
+    const [monthsList, setMonthsList] = useState<MonthEntry[]>([]);
+    const [selectedMonthIdx, setSelectedMonthIdx] = useState(0);
+    const [showMonthPicker, setShowMonthPicker] = useState(false);
+    const [fundLoading, setFundLoading] = useState(true);
+
     // Rol 1 = Residente (solo lectura), 2+ = Tesorero/Admin (puede gestionar)
     const canManage = (user?.rol_id ?? 0) >= 2;
 
     useEffect(() => {
         fetchExpenses();
+        // Cargar meses disponibles desde tower_fund
+        const loadFund = async () => {
+            setFundLoading(true);
+            try {
+                const { data } = await supabase
+                    .from("tower_fund")
+                    .select("updated_at")
+                    .order("id", { ascending: true })
+                    .limit(1)
+                    .maybeSingle();
+                setMonthsList(buildMonthList(data?.updated_at ?? null));
+            } catch {
+                setMonthsList([]);
+            } finally {
+                setFundLoading(false);
+            }
+        };
+        loadFund();
     }, []);
+
+    const selectedMonth = monthsList[selectedMonthIdx] ?? null;
+
+    // Filtrar gastos según modo activo
+    const filteredExpenses = useMemo(() => {
+        if (filterMode === "general" || !selectedMonth) return expenses;
+        return expenses.filter(e => {
+            const d = new Date(e.expense_date);
+            const mName = MONTH_NAMES[d.getMonth()];
+            return mName === selectedMonth.month && d.getFullYear() === selectedMonth.year;
+        });
+    }, [expenses, filterMode, selectedMonth]);
 
     const toggleForm = () => {
         if (showForm) {
@@ -528,6 +577,93 @@ export default function ExpensesScreen() {
                     )}
                 </View>
 
+                {/* ── Barra de filtro General / Por mes ────────────────── */}
+                <View style={styles.filterBar}>
+                    <TouchableOpacity
+                        style={[styles.filterTab, filterMode === "general" && styles.filterTabActive]}
+                        onPress={() => setFilterMode("general")}
+                        activeOpacity={0.8}
+                    >
+                        <Ionicons name="layers-outline" size={13}
+                            color={filterMode === "general" ? Colors.secondary.main : Colors.screen.textMuted} />
+                        <Text style={[styles.filterTabText, filterMode === "general" && styles.filterTabTextActive]}>
+                            General
+                        </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.filterTab, filterMode === "month" && styles.filterTabActive]}
+                        onPress={() => { setFilterMode("month"); }}
+                        activeOpacity={0.8}
+                    >
+                        <Ionicons name="calendar-outline" size={13}
+                            color={filterMode === "month" ? Colors.secondary.main : Colors.screen.textMuted} />
+                        <Text style={[styles.filterTabText, filterMode === "month" && styles.filterTabTextActive]}>
+                            Por mes
+                        </Text>
+                    </TouchableOpacity>
+
+                    {filterMode === "month" && (
+                        <TouchableOpacity
+                            style={styles.monthPillBtn}
+                            onPress={() => setShowMonthPicker(true)}
+                            activeOpacity={0.8}
+                            disabled={fundLoading || monthsList.length === 0}
+                        >
+                            <Text style={styles.monthPillText}>
+                                {fundLoading ? "Cargando..." : selectedMonth
+                                    ? `${selectedMonth.month} ${selectedMonth.year}`
+                                    : "Sin datos"}
+                            </Text>
+                            <Ionicons name="chevron-down" size={12} color={Colors.secondary.main} />
+                        </TouchableOpacity>
+                    )}
+                </View>
+
+                {/* ── Modal picker de mes ───────────────────────────────── */}
+                <Modal visible={showMonthPicker} transparent animationType="slide"
+                    onRequestClose={() => setShowMonthPicker(false)}>
+                    <View style={styles.pickerOverlay}>
+                        <View style={styles.pickerSheet}>
+                            <View style={styles.pickerHandle} />
+                            <View style={styles.pickerHeader}>
+                                <View>
+                                    <Text style={styles.pickerTitle}>Seleccionar mes</Text>
+                                    <Text style={styles.pickerSub}>Desde el inicio del fondo</Text>
+                                </View>
+                                <TouchableOpacity style={styles.pickerCloseBtn}
+                                    onPress={() => setShowMonthPicker(false)} activeOpacity={0.7}>
+                                    <Ionicons name="close" size={18} color={Colors.screen.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+                            <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+                                <View style={styles.pickerList}>
+                                    {monthsList.map((m, i) => (
+                                        <TouchableOpacity
+                                            key={m.key}
+                                            style={[styles.pickerItem, i === selectedMonthIdx && styles.pickerItemActive]}
+                                            onPress={() => { setSelectedMonthIdx(i); setShowMonthPicker(false); }}
+                                            activeOpacity={0.75}
+                                        >
+                                            <View>
+                                                <Text style={[styles.pickerItemName, i === selectedMonthIdx && styles.pickerItemNameActive]}>
+                                                    {m.month}
+                                                </Text>
+                                                <Text style={[styles.pickerItemYear, i === selectedMonthIdx && { color: Colors.secondary.main }]}>
+                                                    {m.year}
+                                                </Text>
+                                            </View>
+                                            {i === selectedMonthIdx && (
+                                                <Ionicons name="checkmark-circle" size={20} color={Colors.secondary.main} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </ScrollView>
+                        </View>
+                    </View>
+                </Modal>
+
                 <ScrollView
                     contentContainerStyle={styles.scroll}
                     showsVerticalScrollIndicator={false}
@@ -541,13 +677,13 @@ export default function ExpensesScreen() {
                     )}
 
                     {/* ── Aviso solo lectura (solo residentes) ─────────── */}
-                    {!canManage && !isLoading && expenses.length > 0 && (
+                    {!canManage && !isLoading && filteredExpenses.length > 0 && (
                         <ReadOnlyNotice />
                     )}
 
                     {/* ── Resumen ────────────────────────────────────────── */}
-                    {!isLoading && expenses.length > 0 && (
-                        <SummaryBanner expenses={expenses} canManage={canManage} />
+                    {!isLoading && filteredExpenses.length > 0 && (
+                        <SummaryBanner expenses={filteredExpenses} />
                     )}
 
                     {/* ── Lista de gastos ────────────────────────────────── */}
@@ -568,26 +704,36 @@ export default function ExpensesScreen() {
                                 <Text style={styles.retryText}>Reintentar</Text>
                             </TouchableOpacity>
                         </View>
-                    ) : expenses.length === 0 ? (
+                    ) : filteredExpenses.length === 0 ? (
                         <View style={styles.emptyCard}>
                             <View style={styles.emptyIcon}>
                                 <Ionicons name="wallet-outline" size={32} color={Colors.screen.textMuted} />
                             </View>
-                            <Text style={styles.emptyTitle}>Sin gastos registrados</Text>
+                            <Text style={styles.emptyTitle}>
+                                {filterMode === "month" && expenses.length > 0
+                                    ? "Sin gastos en este mes"
+                                    : "Sin gastos registrados"}
+                            </Text>
                             <Text style={styles.stateText}>
-                                {canManage
-                                    ? "Toca \"Nuevo\" para registrar el primer gasto."
-                                    : "Aún no hay gastos registrados por la administración."}
+                                {filterMode === "month" && expenses.length > 0
+                                    ? `No hay egresos registrados en ${selectedMonth?.month} ${selectedMonth?.year}.`
+                                    : canManage
+                                        ? "Toca \"Nuevo\" para levantar el primer gasto."
+                                        : "Aún no hay gastos registrados por la administración."}
                             </Text>
                         </View>
                     ) : (
                         <>
                             <View style={styles.sectionLabel}>
-                                <Text style={styles.sectionLabelText}>HISTORIAL DE GASTOS</Text>
+                                <Text style={styles.sectionLabelText}>
+                                    {filterMode === "month" && selectedMonth
+                                        ? `${selectedMonth.month.toUpperCase()} ${selectedMonth.year}`
+                                        : "HISTORIAL DE GASTOS"}
+                                </Text>
                                 <View style={styles.sectionLabelLine} />
                             </View>
 
-                            {expenses.map(item => (
+                            {filteredExpenses.map(item => (
                                 <ExpenseCard
                                     key={item.id}
                                     item={item}
@@ -829,6 +975,76 @@ const styles = StyleSheet.create({
     addBtnText: { fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.secondary.main },
 
     scroll: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40, gap: 12 },
+
+    // ── Filtro bar ────────────────────────────────────────────────────────────
+    filterBar: {
+        flexDirection: "row", alignItems: "center", gap: 6,
+        paddingHorizontal: 16, paddingVertical: 10,
+        backgroundColor: Colors.screen.card,
+        borderBottomWidth: 1, borderBottomColor: Colors.screen.border,
+    },
+    filterTab: {
+        flexDirection: "row", alignItems: "center", gap: 5,
+        paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
+        borderWidth: 1, borderColor: Colors.screen.border,
+        backgroundColor: Colors.screen.bg,
+    },
+    filterTabActive: {
+        backgroundColor: Colors.secondary.soft,
+        borderColor: "#FED7AA",
+    },
+    filterTabText: {
+        fontFamily: "Outfit_600SemiBold", fontSize: 12, color: Colors.screen.textMuted,
+    },
+    filterTabTextActive: { color: Colors.secondary.main },
+    monthPillBtn: {
+        flexDirection: "row", alignItems: "center", gap: 5,
+        paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
+        backgroundColor: "#FFF7ED", borderWidth: 1, borderColor: "#FED7AA",
+        marginLeft: 4,
+    },
+    monthPillText: {
+        fontFamily: "Outfit_700Bold", fontSize: 12, color: Colors.secondary.main,
+    },
+
+    // ── Month Picker Modal ────────────────────────────────────────────────────
+    pickerOverlay: {
+        flex: 1, backgroundColor: "rgba(0,0,0,0.45)",
+        justifyContent: "flex-end",
+    },
+    pickerSheet: {
+        backgroundColor: Colors.screen.card,
+        borderTopLeftRadius: 24, borderTopRightRadius: 24,
+        paddingHorizontal: 20, paddingBottom: 36, paddingTop: 10,
+        shadowColor: "#000", shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.12, shadowRadius: 16, elevation: 12,
+    },
+    pickerHandle: {
+        width: 40, height: 4, borderRadius: 2,
+        backgroundColor: Colors.screen.border, alignSelf: "center", marginBottom: 16,
+    },
+    pickerHeader: {
+        flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16,
+    },
+    pickerTitle: { fontFamily: "Outfit_700Bold", fontSize: 16, color: Colors.screen.textPrimary },
+    pickerSub: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted, marginTop: 2 },
+    pickerCloseBtn: {
+        width: 32, height: 32, borderRadius: 10,
+        backgroundColor: Colors.neutral[100], borderWidth: 1, borderColor: Colors.screen.border,
+        alignItems: "center", justifyContent: "center",
+    },
+    pickerList: { gap: 6, paddingBottom: 8 },
+    pickerItem: {
+        flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+        paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
+        borderWidth: 1, borderColor: Colors.screen.border, backgroundColor: Colors.screen.bg,
+    },
+    pickerItemActive: {
+        backgroundColor: Colors.secondary.soft, borderColor: "#FED7AA",
+    },
+    pickerItemName: { fontFamily: "Outfit_600SemiBold", fontSize: 14, color: Colors.screen.textPrimary },
+    pickerItemNameActive: { color: Colors.secondary.main },
+    pickerItemYear: { fontFamily: "Outfit_400Regular", fontSize: 12, color: Colors.screen.textMuted, marginTop: 2 },
 
     sectionLabel: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
     sectionLabelText: {

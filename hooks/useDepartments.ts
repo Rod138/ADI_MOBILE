@@ -1,4 +1,5 @@
 import supabase from "@/lib/supabase";
+import { hashPassword } from "@/utils/bcrypt";
 import { useState } from "react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -144,24 +145,19 @@ export function useDepartments() {
                 return false;
             }
 
-            // 1.5 Verificar teléfono duplicado
+            // 2. Verificar teléfono duplicado
             const { data: existingPhone, error: phoneError } = await supabase
                 .from("users")
                 .select("id")
                 .eq("phone", payload.phone)
                 .maybeSingle();
 
-            if (phoneError) {
-                setError("El telefono ya esta registrado por otro usuario");
-                return false;
-            }
-
-            if (existingPhone) {
+            if (phoneError || existingPhone) {
                 setError("El teléfono ya está registrado por otro usuario.");
                 return false;
             }
 
-            // 2. Calcular el siguiente ID igual que la web
+            // 3. Calcular el siguiente ID igual que la web
             const { data: maxRow } = await supabase
                 .from("users")
                 .select("id")
@@ -171,7 +167,10 @@ export function useDepartments() {
 
             const newId = (maxRow?.id ?? 0) + 1;
 
-            // 3. Insertar con el ID calculado
+            // 4. Hashear la contraseña antes de guardar
+            const hashedPassword = await hashPassword(payload.password);
+
+            // 5. Insertar con el ID calculado y la contraseña hasheada
             const { error: dbError } = await supabase
                 .from("users")
                 .insert([{
@@ -181,13 +180,12 @@ export function useDepartments() {
                     am: payload.am || null,
                     email: payload.email,
                     phone: payload.phone,
-                    password: payload.password,
+                    password: hashedPassword,   // ← hash, no texto plano
                     dep_id: payload.dep_id,
                     rol_id: 1,
                 }]);
 
             if (dbError) {
-                // Si hay colisión de ID (otro insert llegó primero), reintenta una vez
                 if (dbError.code === "23505") {
                     setError("Conflicto al asignar ID. Intenta de nuevo.");
                     return false;

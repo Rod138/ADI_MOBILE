@@ -506,7 +506,7 @@ export default function AdminQuotaScreen() {
                         <Ionicons name="chevron-back" size={18} color={Colors.screen.textSecondary} />
                     </TouchableOpacity>
                     <View style={{ flex: 1 }}>
-                        <Text style={styles.headerTitle}>Configuración financiera</Text>
+                        <Text style={styles.headerTitle}>Administración financiera</Text>
                         <Text style={styles.headerSubtitle}>Fondo inicial y cuotas mensuales</Text>
                     </View>
                     {isLoading && <ActivityIndicator size="small" color={Colors.primary.main} />}

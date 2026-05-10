@@ -173,7 +173,7 @@ export default function FinanceScreen() {
                             {/* Cuota mensual + Fondo inicial */}
                             <ModuleCard
                                 icon="calculator-outline"
-                                title="Configuración financiera"
+                                title="Administración financiera"
                                 description="Establece el fondo inicial de la torre y define la cuota de mantenimiento por mes."
                                 accentColor="#0891B2"
                                 accentBg="#F0F9FF"

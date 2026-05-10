@@ -1,4 +1,6 @@
+// hooks/useProfile.ts
 import supabase from "@/lib/supabase";
+import { comparePassword, hashPassword } from "@/utils/bcrypt";
 import { useState } from "react";
 
 export interface UpdatePasswordPayload {
@@ -12,9 +14,6 @@ export interface UpdatePhonePayload {
     newPhone: string;
 }
 
-// ─────────────────────────────────────────────
-// Hook — Perfil
-// ─────────────────────────────────────────────
 export function useProfile() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -26,13 +25,12 @@ export function useProfile() {
     };
 
     // ── Cambiar contraseña ─────────────────────
-    // TODO: migrar a hash cuando esté listo
     const updatePassword = async ({ userId, currentPassword, newPassword }: UpdatePasswordPayload): Promise<boolean> => {
         setIsLoading(true);
         clearMessages();
 
         try {
-            // 1. Verificar que la contraseña actual sea correcta
+            // 1. Traer el hash actual
             const { data: userRecord, error: fetchError } = await supabase
                 .from("users")
                 .select("password")
@@ -44,15 +42,19 @@ export function useProfile() {
                 return false;
             }
 
-            if (userRecord.password !== currentPassword) {
+            // 2. Comparar con bcrypt
+            const isMatch = await comparePassword(currentPassword, userRecord.password);
+            if (!isMatch) {
                 setError("La contraseña actual es incorrecta.");
                 return false;
             }
 
-            // 2. Actualizar con la nueva contraseña
+            // 3. Hashear la nueva y guardar
+            const hashedNew = await hashPassword(newPassword);
+
             const { error: dbError } = await supabase
                 .from("users")
-                .update({ password: newPassword })
+                .update({ password: hashedNew })
                 .eq("id", userId);
 
             if (dbError) {
