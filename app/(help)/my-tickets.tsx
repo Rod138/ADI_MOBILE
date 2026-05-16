@@ -55,6 +55,14 @@ function getStatusConfig(statusId: number): {
         border: Colors.neutral[200],
         icon: "lock-closed-outline",
       };
+    case 5:
+      return {
+        label: "Desestimado",
+        color: Colors.status.error,
+        bg: Colors.status.errorBg,
+        border: Colors.status.errorBorder,
+        icon: "close-circle-outline",
+      };
     default:
       return {
         label: "Desconocido",
@@ -73,11 +81,13 @@ function getPriorityConfig(priorityId: number): {
 } {
   switch (priorityId) {
     case 1:
-      return { color: Colors.status.error, label: "Alta", dot: "#DC2626" };
+      return { color: Colors.status.success, label: "Baja", dot: "#16A34A" };
     case 2:
       return { color: Colors.status.warning, label: "Media", dot: "#D97706" };
     case 3:
-      return { color: Colors.status.success, label: "Baja", dot: "#16A34A" };
+      return { color: Colors.status.error, label: "Alta", dot: "#DC2626" };
+    case 4:
+      return { color: Colors.status.error, label: "Urgente", dot: "#991B1B" };
     default:
       return { color: Colors.neutral[400], label: "N/A", dot: "#A3A3A3" };
   }
@@ -158,7 +168,6 @@ function TicketCard({ ticket, index, onPress }: TicketCardProps) {
         {/* Top row */}
         <View style={styles.cardTop}>
           <View style={styles.cardMeta}>
-            <Text style={styles.ticketId}>#{ticket.id}</Text>
             <Text style={styles.ticketDate}>
               {formatDate(ticket.created_at)}
             </Text>
