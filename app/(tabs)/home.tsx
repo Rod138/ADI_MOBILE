@@ -1,8 +1,9 @@
+import PrivacyPolicyModal from "@/components/PrivacyPolicyContent";
 import { Colors } from "@/constants/colors";
 import { useSession } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
     Animated,
     Image,
@@ -103,6 +104,7 @@ function QuickAction({ icon, label, onPress, color }: {
 
 export default function HomeScreen() {
     const { user, fullName } = useSession();
+    const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
     const greetingHour = new Date().getHours();
     const greeting = greetingHour < 12 ? "Buenos días" : greetingHour < 19 ? "Buenas tardes" : "Buenas noches";
@@ -118,103 +120,119 @@ export default function HomeScreen() {
     };
 
     return (
-        <View style={styles.root}>
-            <StatusBar barStyle="light-content" backgroundColor="#1A1A1A" />
-            <SafeAreaView style={{ flex: 1 }}>
+        <>
+            <PrivacyPolicyModal
+                visible={showPrivacyModal}
+                onClose={() => setShowPrivacyModal(false)}
+            />
+            <View style={styles.root}>
+                <StatusBar barStyle="light-content" backgroundColor="#1A1A1A" />
+                <SafeAreaView style={{ flex: 1 }}>
 
-                {/* Top bar */}
-                <View style={styles.topBar}>
-                    <View style={styles.topLeft}>
-                        <View style={styles.logoCircle}>
-                            <Image
-                                source={require("@/assets/images/logo.png")}
-                                style={styles.logoImg}
-                                resizeMode="contain"
-                            />
+                    {/* Top bar */}
+                    <View style={styles.topBar}>
+                        <View style={styles.topLeft}>
+                            <View style={styles.logoCircle}>
+                                <Image
+                                    source={require("@/assets/images/logo.png")}
+                                    style={styles.logoImg}
+                                    resizeMode="contain"
+                                />
+                            </View>
+                            <View>
+                                <Text style={styles.appName}>ADI</Text>
+                                <Text style={styles.appTagline}>Administración de Incidencias</Text>
+                            </View>
                         </View>
-                        <View>
-                            <Text style={styles.appName}>ADI</Text>
-                            <Text style={styles.appTagline}>Administración de Incidencias</Text>
-                        </View>
+                        <TouchableOpacity
+                            style={styles.avatarBtn}
+                            onPress={() => router.push("/(tabs)/profile" as any)}
+                            activeOpacity={0.8}
+                        >
+                            <Text style={styles.avatarBtnText}>
+                                {user ? `${user.name[0]}`.toUpperCase() : "?"}
+                            </Text>
+                        </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                        style={styles.avatarBtn}
-                        onPress={() => router.push("/(tabs)/profile" as any)}
-                        activeOpacity={0.8}
+
+                    <ScrollView
+                        contentContainerStyle={styles.scroll}
+                        showsVerticalScrollIndicator={false}
                     >
-                        <Text style={styles.avatarBtnText}>
-                            {user ? `${user.name[0]}`.toUpperCase() : "?"}
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-
-                <ScrollView
-                    contentContainerStyle={styles.scroll}
-                    showsVerticalScrollIndicator={false}
-                >
-                    {/* Greeting */}
-                    <View style={styles.greetingSection}>
-                        <Text style={styles.greetingName} numberOfLines={1}>
-                            {greeting}, {user?.name ?? ""}
-                        </Text>
-                        <View style={styles.greetingBadge}>
-                            <Ionicons name="shield-checkmark-outline" size={11} color={Colors.primary.light} />
-                            <Text style={styles.greetingBadgeText}>{roleLabel(user?.rol_id ?? 0)}</Text>
+                        {/* Greeting */}
+                        <View style={styles.greetingSection}>
+                            <Text style={styles.greetingName} numberOfLines={1}>
+                                {greeting}, {user?.name ?? ""}
+                            </Text>
+                            <View style={styles.greetingBadge}>
+                                <Ionicons name="shield-checkmark-outline" size={11} color={Colors.primary.light} />
+                                <Text style={styles.greetingBadgeText}>{roleLabel(user?.rol_id ?? 0)}</Text>
+                            </View>
                         </View>
-                    </View>
 
-                    {/* Section label */}
-                    <View style={styles.sectionLabel}>
-                        <Text style={styles.sectionLabelText}>FUNCIONES</Text>
-                        <View style={styles.sectionLabelLine} />
-                    </View>
+                        {/* Section label */}
+                        <View style={styles.sectionLabel}>
+                            <Text style={styles.sectionLabelText}>FUNCIONES</Text>
+                            <View style={styles.sectionLabelLine} />
+                        </View>
 
-                    {/* Module cards */}
-                    <ModuleCard
-                        title="Incidencias"
-                        subtitle="Gestión de reportes"
-                        description="Reporta, revisa y da seguimiento a los problemas de la torre. Adjunta imágenes y recibe actualizaciones en tiempo real."
-                        icon="warning-outline"
-                        accentColor={Colors.primary.main}
-                        accentBg={Colors.primary.soft}
-                        accentBorder={Colors.primary.muted}
-                        onPress={() => router.push("/(incidents)" as any)}
-                    />
-
-                    <ModuleCard
-                        title="Gestión Financiera"
-                        subtitle="Contabilidad y pagos"
-                        description="Consulta el estado de cuenta de la torre, cuotas de mantenimiento, gastos y reportes financieros."
-                        icon="wallet-outline"
-                        accentColor={Colors.secondary.main}
-                        accentBg={Colors.secondary.soft}
-                        accentBorder="#FED7AA"
-                        onPress={() => router.push("/(finance)" as any)}
-                    />
-
-                    {(user?.rol_id ?? 0) >= 2 && (
+                        {/* Module cards */}
                         <ModuleCard
-                            title="Departamentos"
-                            subtitle="Gestión de departamentos"
+                            title="Incidencias"
+                            subtitle="Gestión de reportes"
+                            description="Reporta, revisa y da seguimiento a los problemas de la torre. Adjunta imágenes y recibe actualizaciones en tiempo real."
+                            icon="warning-outline"
+                            accentColor={Colors.primary.main}
+                            accentBg={Colors.primary.soft}
+                            accentBorder={Colors.primary.muted}
+                            onPress={() => router.push("/(incidents)" as any)}
+                        />
+
+                        <ModuleCard
+                            title="Gestión Financiera"
+                            subtitle="Contabilidad y pagos"
                             description="Consulta el estado de cuenta de la torre, cuotas de mantenimiento, gastos y reportes financieros."
-                            icon="home-outline"
+                            icon="wallet-outline"
                             accentColor={Colors.secondary.main}
                             accentBg={Colors.secondary.soft}
                             accentBorder="#FED7AA"
-                            onPress={() => router.push("/(departments)" as any)}
+                            onPress={() => router.push("/(finance)" as any)}
                         />
-                    )}
 
-                    {/* Footer info */}
-                    <View style={styles.footerInfo}>
-                        <Ionicons name="business-outline" size={13} color={Colors.screen.textMuted} />
-                        <Text style={styles.footerInfoText}>
-                            X-CORP ADI v1.0
-                        </Text>
-                    </View>
-                </ScrollView>
-            </SafeAreaView>
-        </View>
+                        {(user?.rol_id ?? 0) >= 2 && (
+                            <ModuleCard
+                                title="Departamentos"
+                                subtitle="Gestión de departamentos"
+                                description="Consulta el estado de cuenta de la torre, cuotas de mantenimiento, gastos y reportes financieros."
+                                icon="home-outline"
+                                accentColor={Colors.secondary.main}
+                                accentBg={Colors.secondary.soft}
+                                accentBorder="#FED7AA"
+                                onPress={() => router.push("/(departments)" as any)}
+                            />
+                        )}
+
+                        {/* Footer info */}
+                        <View style={styles.footerInfo}>
+                            <Ionicons name="business-outline" size={13} color={Colors.screen.textMuted} />
+                            <Text style={styles.footerInfoText}>
+                                X-CORP ADI v1.0
+                            </Text>
+                        </View>
+
+                        {/* Privacy policy link */}
+                        <TouchableOpacity
+                            onPress={() => setShowPrivacyModal(true)}
+                            activeOpacity={0.7}
+                            style={styles.privacyLink}
+                        >
+                            <Ionicons name="shield-checkmark-outline" size={14} color="rgba(0, 0, 0, 0.64)" />
+                            <Text style={styles.privacyLinkText}>Políticas de privacidad</Text>
+                        </TouchableOpacity>
+                    </ScrollView>
+                </SafeAreaView>
+            </View>
+        </>
     );
 }
 
@@ -474,5 +492,27 @@ const styles = StyleSheet.create({
         fontFamily: "Outfit_400Regular",
         fontSize: 11,
         color: Colors.screen.textMuted,
+    },
+
+    // Privacy link
+    privacyLink: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+        marginTop: 4,
+        borderRadius: 22,
+        borderWidth: 1,
+        borderColor: "rgba(0,0,0,0.1)",
+        backgroundColor: "rgba(0,0,0,0.1)",
+        alignSelf: "center",
+    },
+    privacyLinkText: {
+        fontFamily: "Outfit_600SemiBold",
+        fontSize: 13,
+        color: "rgba(0, 0, 0, 0.64)",
+        letterSpacing: 0.3,
     },
 });

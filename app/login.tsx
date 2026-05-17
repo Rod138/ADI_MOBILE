@@ -1,9 +1,11 @@
 import InputField from "@/components/InputField";
 import PrimaryButton from "@/components/PrimaryButton";
+import TermsAndConditionsModal from "@/components/TermsAndConditionsContent";
 import { useAuth } from "@/hooks/useAuth";
 import { globalStyles } from "@/utils/globalStyles";
 import { isFormValid, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, validateLoginForm } from "@/utils/validators";
 import { useSession } from "@/context/AuthContext";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -27,6 +29,9 @@ export default function LoginScreen() {
     const [password, setPassword] = useState("");
     const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
     const [touched, setTouched] = useState<{ email?: boolean; password?: boolean }>({});
+    const [termsAccepted, setTermsAccepted] = useState(false);
+    const [termsError, setTermsError] = useState(false);
+    const [showTermsModal, setShowTermsModal] = useState(false);
 
     const handleEmailChange = (text: string) => {
         const filteredText = text.replace(/[^a-zA-Z0-9.@]/g, "");
@@ -59,6 +64,10 @@ export default function LoginScreen() {
         const errors = validateLoginForm(email, password);
         setFieldErrors(errors);
         if (!isFormValid(errors)) return;
+        if (!termsAccepted) {
+            setTermsError(true);
+            return;
+        }
         const result = await login({ email: email.trim().toLowerCase(), password });
         if (result) {
             await setUser(result);
@@ -71,6 +80,11 @@ export default function LoginScreen() {
     };
 
     return (
+        <>
+        <TermsAndConditionsModal
+            visible={showTermsModal}
+            onClose={() => setShowTermsModal(false)}
+        />
         <View style={styles.root}>
             <StatusBar barStyle="light-content" backgroundColor="#1C1C1C" />
 
@@ -166,6 +180,42 @@ export default function LoginScreen() {
                                         </Text>
                                     </TouchableOpacity>
 
+                                    {/* Terms checkbox */}
+                                    <View style={styles.termsContainer}>
+                                        <TouchableOpacity
+                                            onPress={() => {
+                                                setTermsAccepted(!termsAccepted);
+                                                setTermsError(false);
+                                            }}
+                                            activeOpacity={0.7}
+                                            style={[
+                                                styles.checkbox,
+                                                termsAccepted && styles.checkboxChecked,
+                                                termsError && styles.checkboxError,
+                                            ]}
+                                        >
+                                            {termsAccepted && (
+                                                <Ionicons name="checkmark" size={13} color="#1A1A1A" />
+                                            )}
+                                        </TouchableOpacity>
+                                        <View style={styles.termsTextRow}>
+                                            <Text style={styles.termsLabel}>Aceptar </Text>
+                                            <TouchableOpacity
+                                                onPress={() => setShowTermsModal(true)}
+                                                activeOpacity={0.7}
+                                            >
+                                                <Text style={styles.termsLink}>
+                                                    términos y condiciones
+                                                </Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                    {termsError && (
+                                        <Text style={styles.termsErrorText}>
+                                            Debes aceptar los términos y condiciones para continuar.
+                                        </Text>
+                                    )}
+
                                     <PrimaryButton
                                         label="Iniciar sesión"
                                         onPress={handleLogin}
@@ -187,6 +237,7 @@ export default function LoginScreen() {
                 </SafeAreaView>
             </KeyboardAvoidingView>
         </View>
+        </>  
     );
 }
 
@@ -267,13 +318,62 @@ const styles = StyleSheet.create({
     forgotBtn: {
         alignSelf: "flex-end",
         marginTop: -4,
-        marginBottom: 24,
+        marginBottom: 20,
         paddingVertical: 4,
     },
     forgotText: {
         fontFamily: "Outfit_600SemiBold",
         fontSize: 12,
         color: "#BEF264",
+    },
+
+    // Terms
+    termsContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        marginBottom: 4,
+    },
+    checkbox: {
+        width: 20,
+        height: 20,
+        borderRadius: 5,
+        borderWidth: 1.5,
+        borderColor: "rgba(255,255,255,0.3)",
+        backgroundColor: "transparent",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+    },
+    checkboxChecked: {
+        backgroundColor: "#BEF264",
+        borderColor: "#BEF264",
+    },
+    checkboxError: {
+        borderColor: "#F87171",
+    },
+    termsTextRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        flexWrap: "wrap",
+        flex: 1,
+    },
+    termsLabel: {
+        fontFamily: "Outfit_400Regular",
+        fontSize: 13,
+        color: "rgba(255,255,255,0.65)",
+    },
+    termsLink: {
+        fontFamily: "Outfit_600SemiBold",
+        fontSize: 13,
+        color: "#BEF264",
+        textDecorationLine: "underline",
+    },
+    termsErrorText: {
+        fontFamily: "Outfit_400Regular",
+        fontSize: 11,
+        color: "#F87171",
+        marginBottom: 10,
     },
 
     // Footer
