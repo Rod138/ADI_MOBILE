@@ -196,8 +196,8 @@ export function useDepartments() {
 
             setSuccess("Usuario creado correctamente.");
             return true;
-        } catch {
-            setError("No se pudo conectar al servidor.");
+        } catch (e: any) {
+            setError(`Error interno: ${e?.message || "No se pudo conectar al servidor."}`);
             return false;
         } finally {
             setIsLoading(false);

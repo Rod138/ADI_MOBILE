@@ -1,5 +1,14 @@
 import * as bcrypt from "bcryptjs";
 
+// Polyfill para React Native (si window.crypto no está disponible)
+bcrypt.setRandomFallback((len: number) => {
+    const buf = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        buf[i] = Math.floor(Math.random() * 256);
+    }
+    return Array.from(buf);
+});
+
 const SALT_ROUNDS = 10;
 
 /**
