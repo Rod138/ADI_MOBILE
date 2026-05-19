@@ -248,7 +248,7 @@ function DeptRow({ dept, summary, onValidate, onViewReceipt, onCashPayment }: {
     dept: Department;
     summary: DeptPaymentSummary | null;
     onValidate: (id: number, validated: boolean) => void;
-    onViewReceipt: (recipe: Recipe) => void;
+    onViewReceipt: () => void;
     onCashPayment: (dept: Department) => void;
 }) {
     const missing = !summary || summary.totalPaid === 0;
@@ -263,7 +263,7 @@ function DeptRow({ dept, summary, onValidate, onViewReceipt, onCashPayment }: {
         <TouchableOpacity
             style={[drow.root, { backgroundColor: rowBg, borderColor: rowBorder }]}
             activeOpacity={summary ? 0.82 : 0.95}
-            onPress={() => summary?.latestRecipe && onViewReceipt(summary.latestRecipe)}
+            onPress={() => summary?.payments?.length && onViewReceipt()}
         >
             <View style={[drow.deptIcon, missing && drow.deptIconMissing]}>
                 <Text style={[drow.deptInitial, missing && { color: Colors.screen.textMuted }]}>{dept.name[0]}</Text>
@@ -332,19 +332,20 @@ function DeptRow({ dept, summary, onValidate, onViewReceipt, onCashPayment }: {
 }
 
 // ─── Edit Amount Modal ────────────────────────────────────────────────────────
-// Modal para que el admin edite el monto manualmente (pago del restante en efectivo)
 
 function EditAmountModal({
-    recipe, deptName, onClose, onConfirm,
+    recipe, deptName, totalPaidThisMonth, amountExpected, onClose, onConfirm,
 }: {
     recipe: Recipe;
     deptName: string;
+    totalPaidThisMonth: number;
+    amountExpected: number;
     onClose: () => void;
     onConfirm: (recipeId: number, newAmount: number) => Promise<void>;
 }) {
-    const remaining = recipe.amount_expected > 0
-        ? Math.max(recipe.amount_expected - recipe.amount_paid, 0)
-        : 0;
+    // El restante se calcula sobre el total del mes, no solo sobre este recibo
+    const effectiveExpected = amountExpected > 0 ? amountExpected : (recipe.amount_expected > 0 ? recipe.amount_expected : 0);
+    const remaining = effectiveExpected > 0 ? Math.max(effectiveExpected - totalPaidThisMonth, 0) : 0;
 
     const [amount, setAmount] = useState(remaining > 0 ? String(remaining) : "");
     const [amountError, setAmountError] = useState<string | undefined>();
@@ -360,7 +361,7 @@ function EditAmountModal({
         const newTotal = recipe.amount_paid + n;
         Alert.alert(
             "Registrar pago adicional",
-            `¿Agregar ${formatCurrency(n)} al pago de ${deptName}?\n\nTotal resultante: ${formatCurrency(newTotal)}${recipe.amount_expected > 0 ? ` de ${formatCurrency(recipe.amount_expected)} esperados` : ""}`,
+            `¿Agregar ${formatCurrency(n)} al pago de ${deptName}?\n\nTotal resultante: ${formatCurrency(newTotal)}${effectiveExpected > 0 ? ` de ${formatCurrency(effectiveExpected)} esperados` : ""}`,
             [
                 { text: "Cancelar", style: "cancel" },
                 {
@@ -396,21 +397,21 @@ function EditAmountModal({
                             </TouchableOpacity>
                         </View>
 
-                        {/* Resumen de montos actuales */}
+                        {/* Resumen de montos — ahora muestra el total del mes */}
                         <View style={editModal.summaryCard}>
                             <View style={editModal.summaryItem}>
-                                <Text style={editModal.summaryLabel}>PAGADO</Text>
+                                <Text style={editModal.summaryLabel}>PAGADO HOY</Text>
                                 <Text style={[editModal.summaryValue, { color: Colors.primary.dark }]}>
-                                    {formatCurrency(recipe.amount_paid)}
+                                    {formatCurrency(totalPaidThisMonth)}
                                 </Text>
                             </View>
-                            {recipe.amount_expected > 0 && (
+                            {effectiveExpected > 0 && (
                                 <>
                                     <View style={editModal.summaryDivider} />
                                     <View style={editModal.summaryItem}>
                                         <Text style={editModal.summaryLabel}>ESPERADO</Text>
                                         <Text style={[editModal.summaryValue, { color: Colors.screen.textSecondary }]}>
-                                            {formatCurrency(recipe.amount_expected)}
+                                            {formatCurrency(effectiveExpected)}
                                         </Text>
                                     </View>
                                     <View style={editModal.summaryDivider} />
@@ -474,7 +475,7 @@ function EditAmountModal({
                                 <View style={editModal.previewTotal}>
                                     <Ionicons name="calculator-outline" size={13} color={Colors.primary.dark} />
                                     <Text style={editModal.previewTotalText}>
-                                        Nuevo total:{" "}
+                                        Nuevo total en este recibo:{" "}
                                         <Text style={{ fontFamily: "Outfit_700Bold", color: Colors.primary.dark }}>
                                             {formatCurrency(recipe.amount_paid + parseFloat(amount))}
                                         </Text>
@@ -520,18 +521,29 @@ function EditAmountModal({
 
 // ─── Receipt Detail Modal ─────────────────────────────────────────────────────
 
-function ReceiptModal({ recipe, deptName, onClose, onValidate, onEditAmount }: {
-    recipe: Recipe; deptName: string;
+function ReceiptModal({
+    recipes, deptName, totalPaidThisMonth, amountExpected, onClose, onValidate, onEditAmount,
+}: {
+    recipes: Recipe[];
+    deptName: string;
+    totalPaidThisMonth: number;
+    amountExpected: number;
     onClose: () => void;
     onValidate: (id: number, validated: boolean) => void;
     onEditAmount: (recipe: Recipe) => void;
 }) {
-    const sc = getStatusConfig(recipe.validated ?? null);
-    const isPdf = recipe.url_image?.toLowerCase().includes(".pdf") || recipe.url_image?.includes("/raw/");
-    const isPending = recipe.validated === null || recipe.validated === undefined;
-    const isApproved = recipe.validated === true;
-    const [viewingImg, setViewingImg] = useState(false);
-    const isPartial = recipe.amount_expected > 0 && recipe.amount_paid < recipe.amount_expected;
+    const sortedRecipes = [...recipes].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const latestRecipe = sortedRecipes[0];
+
+    if (!latestRecipe) return null;
+
+    const sc = getStatusConfig(latestRecipe.validated ?? null);
+    const isApproved = latestRecipe.validated === true;
+    const [viewingImgUrl, setViewingImgUrl] = useState<string | null>(null);
+
+    // isPartial ahora se calcula sobre el total acumulado del mes
+    const effectiveExpected = amountExpected > 0 ? amountExpected : (latestRecipe.amount_expected > 0 ? latestRecipe.amount_expected : 0);
+    const isPartial = effectiveExpected > 0 && totalPaidThisMonth < effectiveExpected && totalPaidThisMonth > 0;
 
     return (
         <Modal visible animationType="slide" transparent onRequestClose={onClose}>
@@ -544,7 +556,7 @@ function ReceiptModal({ recipe, deptName, onClose, onValidate, onEditAmount }: {
                         </View>
                         <View style={rmodal.headerInfo}>
                             <Text style={rmodal.deptName}>{deptName}</Text>
-                            <Text style={rmodal.period}>{recipe.month} {recipe.year}</Text>
+                            <Text style={rmodal.period}>{latestRecipe.month} {latestRecipe.year}</Text>
                         </View>
                         <View style={[rmodal.statusPill, { backgroundColor: sc.bg, borderColor: sc.border }]}>
                             <Ionicons name={sc.icon} size={11} color={sc.color} />
@@ -556,18 +568,22 @@ function ReceiptModal({ recipe, deptName, onClose, onValidate, onEditAmount }: {
                     </View>
 
                     <ScrollView showsVerticalScrollIndicator={false}>
-                        {/* Montos */}
+                        {/* Montos — muestra el total acumulado del mes */}
                         <View style={rmodal.amountsCard}>
                             <View style={rmodal.amountItem}>
-                                <Text style={rmodal.amountItemLabel}>PAGADO</Text>
-                                <Text style={[rmodal.amountItemValue, { color: Colors.primary.dark }]}>{formatCurrency(recipe.amount_paid)}</Text>
+                                <Text style={rmodal.amountItemLabel}>TOTAL PAGADO</Text>
+                                <Text style={[rmodal.amountItemValue, { color: Colors.primary.dark }]}>
+                                    {formatCurrency(totalPaidThisMonth)}
+                                </Text>
                             </View>
-                            {recipe.amount_expected > 0 && (
+                            {effectiveExpected > 0 && (
                                 <>
                                     <View style={rmodal.amountDivider} />
                                     <View style={rmodal.amountItem}>
                                         <Text style={rmodal.amountItemLabel}>ESPERADO</Text>
-                                        <Text style={[rmodal.amountItemValue, { color: Colors.screen.textSecondary }]}>{formatCurrency(recipe.amount_expected)}</Text>
+                                        <Text style={[rmodal.amountItemValue, { color: Colors.screen.textSecondary }]}>
+                                            {formatCurrency(effectiveExpected)}
+                                        </Text>
                                     </View>
                                 </>
                             )}
@@ -579,13 +595,12 @@ function ReceiptModal({ recipe, deptName, onClose, onValidate, onEditAmount }: {
                                 <View style={rmodal.partialAlert}>
                                     <Ionicons name="pie-chart-outline" size={14} color={Colors.status.warning} />
                                     <Text style={rmodal.partialAlertText}>
-                                        Pago parcial — faltan {formatCurrency(recipe.amount_expected - recipe.amount_paid)}
+                                        Pago parcial — faltan {formatCurrency(effectiveExpected - totalPaidThisMonth)}
                                     </Text>
                                 </View>
-                                {/* Botón para registrar el restante en efectivo */}
                                 <TouchableOpacity
                                     style={rmodal.editAmountBtn}
-                                    onPress={() => { onClose(); onEditAmount(recipe); }}
+                                    onPress={() => { onClose(); onEditAmount(latestRecipe); }}
                                     activeOpacity={0.85}
                                 >
                                     <Ionicons name="cash-outline" size={16} color={Colors.primary.dark} />
@@ -597,11 +612,11 @@ function ReceiptModal({ recipe, deptName, onClose, onValidate, onEditAmount }: {
                             </View>
                         )}
 
-                        {/* Botón de edición manual de monto siempre visible para admin (aunque esté aprobado) */}
+                        {/* Botón de edición manual de monto para pagos ya completos */}
                         {!isPartial && isApproved && (
                             <TouchableOpacity
                                 style={rmodal.editAmountBtnSecondary}
-                                onPress={() => { onClose(); onEditAmount(recipe); }}
+                                onPress={() => { onClose(); onEditAmount(latestRecipe); }}
                                 activeOpacity={0.85}
                             >
                                 <Ionicons name="pencil-outline" size={14} color={Colors.screen.textMuted} />
@@ -609,68 +624,77 @@ function ReceiptModal({ recipe, deptName, onClose, onValidate, onEditAmount }: {
                             </TouchableOpacity>
                         )}
 
-                        {/* Comprobante */}
-                        <View style={rmodal.section}>
-                            <Text style={rmodal.sectionLabel}>COMPROBANTE</Text>
-                            {recipe.url_image ? (
-                                isPdf ? (
-                                    <TouchableOpacity style={rmodal.pdfRow} onPress={() => Linking.openURL(recipe.url_image!)} activeOpacity={0.85}>
-                                        <View style={rmodal.pdfIcon}>
-                                            <Ionicons name="document-text" size={22} color={Colors.status.error} />
-                                        </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={rmodal.pdfLabel}>Comprobante PDF</Text>
-                                            <Text style={rmodal.pdfHint}>Toca para abrir</Text>
-                                        </View>
-                                        <Ionicons name="open-outline" size={15} color={Colors.screen.textMuted} />
-                                    </TouchableOpacity>
-                                ) : (
-                                    <TouchableOpacity activeOpacity={0.85} onPress={() => setViewingImg(true)}>
-                                        <Image source={{ uri: recipe.url_image }} style={rmodal.img} resizeMode="cover" />
-                                        <View style={rmodal.imgOverlay}>
-                                            <Ionicons name="expand-outline" size={13} color="#fff" />
-                                            <Text style={rmodal.imgOverlayText}>Ver imagen completa</Text>
-                                        </View>
-                                    </TouchableOpacity>
-                                )
-                            ) : (
-                                <View style={rmodal.noImg}>
-                                    <Ionicons name="cash-outline" size={16} color={Colors.screen.textMuted} />
-                                    <Text style={rmodal.noImgText}>Pago en efectivo</Text>
-                                </View>
-                            )}
-                        </View>
+                        {/* Comprobantes */}
+                        {sortedRecipes.map((recipe, index) => {
+                            const isPdf = recipe.url_image?.toLowerCase().includes(".pdf") || recipe.url_image?.includes("/raw/");
+                            const isPending = recipe.validated === null || recipe.validated === undefined;
 
-                        {/* Acciones de validación */}
-                        {isPending && (
-                            <View style={rmodal.actions}>
-                                <TouchableOpacity style={[rmodal.actionBtn, rmodal.rejectBtn]}
-                                    onPress={() => {
-                                        Alert.alert("Rechazar", `¿Rechazar comprobante de ${deptName}?`, [
-                                            { text: "Cancelar", style: "cancel" },
-                                            { text: "Rechazar", style: "destructive", onPress: () => { onValidate(recipe.id, false); onClose(); } }
-                                        ]);
-                                    }} activeOpacity={0.8}>
-                                    <Ionicons name="close" size={15} color={Colors.status.error} />
-                                    <Text style={[rmodal.actionBtnText, { color: Colors.status.error }]}>Rechazar</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={[rmodal.actionBtn, rmodal.approveBtn]}
-                                    onPress={() => {
-                                        Alert.alert("Aprobar", `¿Aprobar comprobante de ${deptName}?`, [
-                                            { text: "Cancelar", style: "cancel" },
-                                            { text: "Aprobar", onPress: () => { onValidate(recipe.id, true); onClose(); } }
-                                        ]);
-                                    }} activeOpacity={0.8}>
-                                    <Ionicons name="checkmark" size={15} color={Colors.status.success} />
-                                    <Text style={[rmodal.actionBtnText, { color: Colors.status.success }]}>Aprobar</Text>
-                                </TouchableOpacity>
-                            </View>
-                        )}
+                            return (
+                                <View key={recipe.id} style={rmodal.section}>
+                                    <Text style={rmodal.sectionLabel}>
+                                        COMPROBANTE {sortedRecipes.length > 1 ? index + 1 : ''} {recipe.amount_paid > 0 ? `(${formatCurrency(recipe.amount_paid)})` : ''}
+                                    </Text>
+                                    {recipe.url_image ? (
+                                        isPdf ? (
+                                            <TouchableOpacity style={rmodal.pdfRow} onPress={() => Linking.openURL(recipe.url_image!)} activeOpacity={0.85}>
+                                                <View style={rmodal.pdfIcon}>
+                                                    <Ionicons name="document-text" size={22} color={Colors.status.error} />
+                                                </View>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={rmodal.pdfLabel}>Comprobante PDF</Text>
+                                                    <Text style={rmodal.pdfHint}>Toca para abrir</Text>
+                                                </View>
+                                                <Ionicons name="open-outline" size={15} color={Colors.screen.textMuted} />
+                                            </TouchableOpacity>
+                                        ) : (
+                                            <TouchableOpacity activeOpacity={0.85} onPress={() => setViewingImgUrl(recipe.url_image!)}>
+                                                <Image source={{ uri: recipe.url_image }} style={rmodal.img} resizeMode="cover" />
+                                                <View style={rmodal.imgOverlay}>
+                                                    <Ionicons name="expand-outline" size={13} color="#fff" />
+                                                    <Text style={rmodal.imgOverlayText}>Ver imagen completa</Text>
+                                                </View>
+                                            </TouchableOpacity>
+                                        )
+                                    ) : (
+                                        <View style={rmodal.noImg}>
+                                            <Ionicons name="cash-outline" size={16} color={Colors.screen.textMuted} />
+                                            <Text style={rmodal.noImgText}>Pago en efectivo</Text>
+                                        </View>
+                                    )}
+
+                                    {/* Acciones de validación */}
+                                    {isPending && (
+                                        <View style={rmodal.actions}>
+                                            <TouchableOpacity style={[rmodal.actionBtn, rmodal.rejectBtn]}
+                                                onPress={() => {
+                                                    Alert.alert("Rechazar", `¿Rechazar este comprobante de ${deptName}?`, [
+                                                        { text: "Cancelar", style: "cancel" },
+                                                        { text: "Rechazar", style: "destructive", onPress: () => { onValidate(recipe.id, false); onClose(); } }
+                                                    ]);
+                                                }} activeOpacity={0.8}>
+                                                <Ionicons name="close" size={15} color={Colors.status.error} />
+                                                <Text style={[rmodal.actionBtnText, { color: Colors.status.error }]}>Rechazar</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity style={[rmodal.actionBtn, rmodal.approveBtn]}
+                                                onPress={() => {
+                                                    Alert.alert("Aprobar", `¿Aprobar este comprobante de ${deptName}?`, [
+                                                        { text: "Cancelar", style: "cancel" },
+                                                        { text: "Aprobar", onPress: () => { onValidate(recipe.id, true); onClose(); } }
+                                                    ]);
+                                                }} activeOpacity={0.8}>
+                                                <Ionicons name="checkmark" size={15} color={Colors.status.success} />
+                                                <Text style={[rmodal.actionBtnText, { color: Colors.status.success }]}>Aprobar</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
+                                </View>
+                            );
+                        })}
                     </ScrollView>
                 </View>
             </View>
-            {viewingImg && recipe.url_image && (
-                <ImageViewer uri={recipe.url_image} onClose={() => setViewingImg(false)} />
+            {viewingImgUrl && (
+                <ImageViewer uri={viewingImgUrl} onClose={() => setViewingImgUrl(null)} />
             )}
         </Modal>
     );
@@ -732,11 +756,11 @@ export default function AdminRecipesScreen() {
     const [selectedMonthIdx, setSelectedMonthIdx] = useState(0);
     const [fundLoading, setFundLoading] = useState(true);
 
-    const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+    const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [validatingId, setValidatingId] = useState<number | null>(null);
     const [cashTarget, setCashTarget] = useState<Department | null>(null);
-    const [editAmountRecipe, setEditAmountRecipe] = useState<Recipe | null>(null); // ← NUEVO
+    const [editAmountRecipe, setEditAmountRecipe] = useState<Recipe | null>(null);
 
     const currentYear = new Date().getFullYear();
 
@@ -779,6 +803,7 @@ export default function AdminRecipesScreen() {
         fetchQuota();
     }, [selectedMonth]);
 
+    // ── FIX: deptSummaries acumula todos los pagos aprobados del mes por depto ─
     const deptSummaries = useMemo(() => {
         if (!selectedMonth) return new Map<number, DeptPaymentSummary>();
         const monthRecipes = recipes.filter(r => r.month === selectedMonth.month && r.year === selectedMonth.year);
@@ -786,19 +811,36 @@ export default function AdminRecipesScreen() {
 
         for (const r of monthRecipes) {
             if (r.validated === false) continue;
-            const existing = map.get(r.dep_id) ?? { totalPaid: 0, expected: r.amount_expected, payments: [], isPartial: false, latestRecipe: null };
+            const existing = map.get(r.dep_id) ?? {
+                totalPaid: 0,
+                expected: r.amount_expected,
+                payments: [],
+                isPartial: false,
+                latestRecipe: null,
+            };
             existing.payments.push(r);
+            // Acumular TODOS los pagos aprobados del mes para este depto
             if (r.validated === true) existing.totalPaid += Number(r.amount_paid);
+            // Conservar el recibo más reciente para mostrar en el modal
             if (!existing.latestRecipe || new Date(r.created_at) > new Date(existing.latestRecipe.created_at)) {
                 existing.latestRecipe = r;
             }
             map.set(r.dep_id, existing);
         }
 
+        // FIX: usar monthlyAmountExpected como fuente de verdad para isPartial
+        // El amount_expected del recibo individual NO es confiable para el total del mes
         for (const [, summary] of map) {
-            const effectiveExpected = summary.expected > 0 ? summary.expected : monthlyAmountExpected;
-            summary.isPartial = effectiveExpected > 0 && summary.totalPaid < effectiveExpected && summary.totalPaid > 0;
+            const effectiveExpected = monthlyAmountExpected > 0
+                ? monthlyAmountExpected
+                : (summary.expected > 0 ? summary.expected : 0);
+            // Sincronizar expected en el summary para que DeptRow y ReceiptModal lo usen
+            summary.expected = effectiveExpected;
+            summary.isPartial = effectiveExpected > 0
+                && summary.totalPaid < effectiveExpected
+                && summary.totalPaid > 0;
         }
+
         return map;
     }, [recipes, selectedMonth, monthlyAmountExpected]);
 
@@ -817,7 +859,6 @@ export default function AdminRecipesScreen() {
         await validateRecipe(id, validated);
         setValidatingId(null);
 
-        //Buscar la recipe para saber dep_id, month, year, amount
         const recipe = recipes.find(r => r.id === id);
         if (recipe) {
             if (validated === false) {
@@ -850,7 +891,6 @@ export default function AdminRecipesScreen() {
         } catch { Alert.alert("Error", "No se pudo conectar al servidor."); }
     };
 
-    // ── Actualizar monto de pago de un recibo existente ────────────────────────
     const handleEditAmount = async (recipeId: number, newTotalAmount: number) => {
         try {
             const { error: dbError } = await supabase
@@ -875,6 +915,19 @@ export default function AdminRecipesScreen() {
         selectedMonth ? recipes.filter(r => r.month === selectedMonth.month && r.year === selectedMonth.year) : [],
         [recipes, selectedMonth]
     );
+
+    // Calcular el total pagado del mes para el depto del recibo seleccionado
+    const getTotalPaidForDept = (depId: number): number => {
+        if (!selectedMonth) return 0;
+        return recipes
+            .filter(r =>
+                r.dep_id === depId &&
+                r.month === selectedMonth.month &&
+                r.year === selectedMonth.year &&
+                r.validated === true
+            )
+            .reduce((acc, r) => acc + Number(r.amount_paid), 0);
+    };
 
     return (
         <View style={styles.root}>
@@ -974,7 +1027,7 @@ export default function AdminRecipesScreen() {
                                         dept={dept}
                                         summary={summary}
                                         onValidate={handleValidate}
-                                        onViewReceipt={setSelectedRecipe}
+                                        onViewReceipt={() => setSelectedDeptId(dept.id)}
                                         onCashPayment={setCashTarget}
                                     />
                                 </View>
@@ -987,14 +1040,16 @@ export default function AdminRecipesScreen() {
             </SafeAreaView>
 
             {/* Receipt Detail Modal */}
-            {selectedRecipe && (
+            {selectedDeptId && (
                 <ReceiptModal
-                    recipe={selectedRecipe}
-                    deptName={getDeptName(selectedRecipe.dep_id)}
-                    onClose={() => setSelectedRecipe(null)}
+                    recipes={deptSummaries.get(selectedDeptId)?.payments || []}
+                    deptName={getDeptName(selectedDeptId)}
+                    totalPaidThisMonth={getTotalPaidForDept(selectedDeptId)}
+                    amountExpected={monthlyAmountExpected}
+                    onClose={() => setSelectedDeptId(null)}
                     onValidate={handleValidate}
                     onEditAmount={(recipe) => {
-                        setSelectedRecipe(null);
+                        setSelectedDeptId(null);
                         setEditAmountRecipe(recipe);
                     }}
                 />
@@ -1005,6 +1060,8 @@ export default function AdminRecipesScreen() {
                 <EditAmountModal
                     recipe={editAmountRecipe}
                     deptName={getDeptName(editAmountRecipe.dep_id)}
+                    totalPaidThisMonth={getTotalPaidForDept(editAmountRecipe.dep_id)}
+                    amountExpected={monthlyAmountExpected}
                     onClose={() => setEditAmountRecipe(null)}
                     onConfirm={handleEditAmount}
                 />
@@ -1160,18 +1217,15 @@ const rmodal = StyleSheet.create({
     amountDivider: { width: 1, height: 40, backgroundColor: Colors.screen.border },
     amountItemLabel: { fontFamily: "Outfit_700Bold", fontSize: 9, color: Colors.screen.textMuted, letterSpacing: 1.2, marginBottom: 4 },
     amountItemValue: { fontFamily: "Outfit_700Bold", fontSize: 16 },
-    // Sección de pago parcial
     partialSection: { gap: 8, marginBottom: 12 },
     partialAlert: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: Colors.status.warningBg, borderRadius: 10, borderWidth: 1, borderColor: Colors.status.warningBorder, paddingHorizontal: 12, paddingVertical: 9 },
     partialAlertText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.warning },
-    // Botón de editar monto (principal - para pagos parciales)
     editAmountBtn: {
         flexDirection: "row", alignItems: "center", gap: 10,
         paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
         backgroundColor: Colors.primary.soft, borderWidth: 1.5, borderColor: Colors.primary.muted,
     },
     editAmountBtnText: { flex: 1, fontFamily: "Outfit_600SemiBold", fontSize: 13, color: Colors.primary.dark },
-    // Botón de editar monto secundario (para pagos ya completos)
     editAmountBtnSecondary: {
         flexDirection: "row", alignItems: "center", gap: 8,
         paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10,

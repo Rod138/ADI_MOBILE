@@ -90,7 +90,7 @@ function buildAvailablePeriods(startDate: string | null): AvailablePeriod[] {
         if (result.length >= 60) break;
     }
 
-    return result; // orden desc (más reciente primero)
+    return result;
 }
 
 // ── Period Picker Modal ───────────────────────────────────────────────────────
@@ -110,7 +110,6 @@ function PeriodPickerModal({
         if (visible) setDraftKey(selectedKey);
     }, [visible, selectedKey]);
 
-    // Agrupar por año
     const byYear: Record<number, AvailablePeriod[]> = {};
     for (const p of availablePeriods) {
         if (!byYear[p.year]) byYear[p.year] = [];
@@ -213,15 +212,23 @@ function ImageViewer({ uri, onClose }: { uri: string; onClose: () => void }) {
 }
 
 // ── Receipt Card ──────────────────────────────────────────────────────────────
+// FIX: recibe totalPaidThisMonth para calcular isPartial a nivel de mes,
+// no de recibo individual.
 
 function ReceiptCard({
-    item, onDelete, onViewImage,
+    item, onDelete, onViewImage, totalPaidThisMonth,
 }: {
-    item: Recipe; onDelete?: (id: number) => void; onViewImage: (url: string) => void;
+    item: Recipe;
+    onDelete?: (id: number) => void;
+    onViewImage: (url: string) => void;
+    totalPaidThisMonth: number;
 }) {
     const vs = getValidationStyle(item.validated ?? null);
     const isPdf = item.url_image?.toLowerCase().includes(".pdf") || item.url_image?.includes("/raw/");
-    const isPartial = item.amount_paid < item.amount_expected;
+
+    // FIX: isPartial se calcula sobre el total acumulado del mes, no del recibo individual.
+    // Si ya se pagaron $500 + $500 = $1000 y la cuota es $1000, isPartial = false.
+    const isPartial = item.amount_expected > 0 && totalPaidThisMonth < item.amount_expected;
 
     return (
         <View style={card.root}>
@@ -251,7 +258,7 @@ function ReceiptCard({
                 {/* Montos */}
                 <View style={card.amountsRow}>
                     <View style={card.amountItem}>
-                        <Text style={card.amountLabel}>PAGADO</Text>
+                        <Text style={card.amountLabel}>ESTE PAGO</Text>
                         <Text style={[card.amountValue, { color: Colors.primary.dark }]}>
                             {formatCurrency(item.amount_paid)}
                         </Text>
@@ -260,25 +267,33 @@ function ReceiptCard({
                         <>
                             <View style={card.amountDivider} />
                             <View style={card.amountItem}>
+                                <Text style={card.amountLabel}>TOTAL MES</Text>
+                                <Text style={[card.amountValue, {
+                                    color: isPartial ? Colors.status.warning : Colors.status.success,
+                                }]}>
+                                    {formatCurrency(totalPaidThisMonth)}
+                                </Text>
+                            </View>
+                            <View style={card.amountDivider} />
+                            <View style={card.amountItem}>
                                 <Text style={card.amountLabel}>CUOTA</Text>
                                 <Text style={[card.amountValue, { color: Colors.screen.textSecondary }]}>
                                     {formatCurrency(item.amount_expected)}
                                 </Text>
                             </View>
-                            {isPartial && (
-                                <>
-                                    <View style={card.amountDivider} />
-                                    <View style={card.amountItem}>
-                                        <Text style={card.amountLabel}>RESTA</Text>
-                                        <Text style={[card.amountValue, { color: Colors.status.error, fontSize: 13 }]}>
-                                            {formatCurrency(item.amount_expected - item.amount_paid)}
-                                        </Text>
-                                    </View>
-                                </>
-                            )}
                         </>
                     )}
                 </View>
+
+                {/* Restante si hay pago parcial */}
+                {isPartial && (
+                    <View style={card.remainingRow}>
+                        <Ionicons name="alert-circle-outline" size={13} color={Colors.status.warning} />
+                        <Text style={card.remainingText}>
+                            Faltan {formatCurrency(item.amount_expected - totalPaidThisMonth)} para completar la cuota
+                        </Text>
+                    </View>
+                )}
 
                 {/* Comprobante */}
                 {item.url_image ? (
@@ -349,7 +364,6 @@ function UploadForm({
         if (amountExpected > 0 && !amount) setAmount(String(amountExpected));
     }, [amountExpected]);
 
-    // Reiniciar al cambiar mes
     useEffect(() => {
         setAmount(amountExpected > 0 ? String(amountExpected) : "");
         setFile(null);
@@ -470,7 +484,6 @@ function UploadForm({
                 )}
             </View>
 
-            {/* Cuota esperada */}
             {amountExpected > 0 && (
                 <View style={form.quotaNote}>
                     <Ionicons name="information-circle-outline" size={14} color="#0891B2" />
@@ -481,7 +494,6 @@ function UploadForm({
                 </View>
             )}
 
-            {/* Monto a pagar */}
             <View style={form.field}>
                 <Text style={form.fieldLabel}>MONTO QUE ESTÁS PAGANDO</Text>
                 <View style={[form.amountInput, amountError && form.amountInputError]}>
@@ -505,7 +517,6 @@ function UploadForm({
                 )}
             </View>
 
-            {/* Comprobante */}
             <View style={form.field}>
                 <Text style={form.fieldLabel}>COMPROBANTE</Text>
                 {file ? (
@@ -577,18 +588,15 @@ export default function RecipesScreen() {
     const [loadingQuota, setLoadingQuota] = useState(true);
     const formAnim = useRef(new Animated.Value(0)).current;
 
-    // Período seleccionado
     const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH);
     const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
     const [showPeriodPicker, setShowPeriodPicker] = useState(false);
 
-    // Períodos disponibles (desde fecha de inicio del fondo)
     const [availablePeriods, setAvailablePeriods] = useState<AvailablePeriod[]>([]);
     const [fundLoading, setFundLoading] = useState(true);
 
     const depId = user?.dep_id;
 
-    // Cargar fondo para construir lista de períodos disponibles
     useEffect(() => {
         const loadFund = async () => {
             setFundLoading(true);
@@ -603,7 +611,6 @@ export default function RecipesScreen() {
                 const periods = buildAvailablePeriods(data?.updated_at ?? null);
                 setAvailablePeriods(periods);
             } catch {
-                // Sin fondo: solo mes actual
                 setAvailablePeriods([{
                     month: CURRENT_MONTH,
                     monthIdx: new Date().getMonth(),
@@ -617,7 +624,6 @@ export default function RecipesScreen() {
         loadFund();
     }, []);
 
-    // Cargar comprobantes y cuota al cambiar de período
     useEffect(() => {
         if (!depId) return;
         fetchMyRecipesByPeriod(depId, selectedMonth, selectedYear);
@@ -626,7 +632,6 @@ export default function RecipesScreen() {
             setAmountExpected(q ? Number(q.amount) : 0);
             setLoadingQuota(false);
         });
-        // Cerrar formulario al cambiar período
         setShowForm(false);
         formAnim.setValue(0);
     }, [depId, selectedMonth, selectedYear]);
@@ -664,12 +669,24 @@ export default function RecipesScreen() {
         ]);
     };
 
-    const approvedRecipe = recipes.find(r => r.validated === true);
+    // ── FIX: totalPaid acumula TODOS los pagos aprobados del mes ──────────────
+    const totalPaid = recipes
+        .filter(r => r.validated === true)
+        .reduce((s, r) => s + Number(r.amount_paid), 0);
+
     const rejectedRecipes = recipes.filter(r => r.validated === false);
-    const hasApproved = !!approvedRecipe;
-    const totalPaid = recipes.filter(r => r.validated === true).reduce((s, r) => s + r.amount_paid, 0);
+
+    // isComplete: el total aprobado cubre la cuota esperada
     const isComplete = amountExpected > 0 && totalPaid >= amountExpected;
-    const canUpload = !hasApproved || (amountExpected > 0 && totalPaid < amountExpected);
+
+    // FIX: canUpload — permitir subir mientras el mes no esté completo.
+    // No se bloquea solo por tener un recibo aprobado; se bloquea cuando totalPaid >= amountExpected.
+    // Si no hay cuota configurada, se permite subir siempre que no haya ningún aprobado sin cuota.
+    const hasPendingOrApproved = recipes.some(r => r.validated === true || r.validated === null);
+    const canUpload = amountExpected > 0
+        ? !isComplete                               // hay cuota: permitir hasta cubrir
+        : !hasPendingOrApproved;                    // sin cuota: bloquear si ya hay uno aprobado/pendiente
+
     const showUploadBtn = canUpload || rejectedRecipes.length > 0;
 
     const isPastMonth = selectedMonth !== CURRENT_MONTH || selectedYear !== CURRENT_YEAR;
@@ -692,7 +709,6 @@ export default function RecipesScreen() {
                         </View>
                     </View>
                     <View style={styles.headerRight}>
-                        {/* Selector de período */}
                         {hasMultiplePeriods && !fundLoading && (
                             <TouchableOpacity
                                 style={styles.periodBtn}
@@ -755,7 +771,7 @@ export default function RecipesScreen() {
                         </View>
                     )}
 
-                    {/* Banner: cuota esperada */}
+                    {/* Banner: cuota esperada (sin recibos aún) */}
                     {!loadingQuota && amountExpected > 0 && !isLoading && recipes.length === 0 && (
                         <View style={styles.quotaBanner}>
                             <View style={styles.quotaBannerIcon}>
@@ -769,7 +785,7 @@ export default function RecipesScreen() {
                         </View>
                     )}
 
-                    {/* Progreso del pago */}
+                    {/* Progreso del pago — muestra totalPaid acumulado */}
                     {amountExpected > 0 && totalPaid > 0 && !isComplete && (
                         <View style={styles.progressCard}>
                             <View style={styles.progressHeader}>
@@ -842,6 +858,7 @@ export default function RecipesScreen() {
                                     item={item}
                                     onDelete={handleDelete}
                                     onViewImage={setViewingImage}
+                                    totalPaidThisMonth={totalPaid}  // FIX: total acumulado del mes
                                 />
                             ))}
                         </>
@@ -849,7 +866,6 @@ export default function RecipesScreen() {
                 </ScrollView>
             </SafeAreaView>
 
-            {/* Period Picker */}
             <PeriodPickerModal
                 visible={showPeriodPicker}
                 availablePeriods={availablePeriods}
@@ -867,10 +883,6 @@ export default function RecipesScreen() {
         </View>
     );
 }
-
-// ── Nota: en useRecipes necesitarás agregar fetchMyRecipesByPeriod ────────────
-// Ejemplo:
-// const fetchMyRecipesByPeriod = async (depId: number, month: string, year: number) => { ... }
 
 // ── Estilos ───────────────────────────────────────────────────────────────────
 
@@ -1022,6 +1034,13 @@ const card = StyleSheet.create({
         color: Colors.screen.textMuted, letterSpacing: 1.2, marginBottom: 3,
     },
     amountValue: { fontFamily: "Outfit_700Bold", fontSize: 14 },
+    remainingRow: {
+        flexDirection: "row", alignItems: "center", gap: 8,
+        backgroundColor: Colors.status.warningBg, borderRadius: 8,
+        borderWidth: 1, borderColor: Colors.status.warningBorder,
+        paddingHorizontal: 10, paddingVertical: 7,
+    },
+    remainingText: { fontFamily: "Outfit_500Medium", fontSize: 12, color: Colors.status.warning, flex: 1 },
     img: { width: "100%", height: 180, borderRadius: 10, marginTop: 4 },
     imgOverlay: {
         position: "absolute", bottom: 4, right: 0, left: 0,
