@@ -199,7 +199,7 @@ export default function HomeScreen() {
                             onPress={() => router.push("/(finance)" as any)}
                         />
 
-                        {(user?.rol_id ?? 0) >= 2 && (
+                        {(user?.rol_id ?? 0) >= 3 && (
                             <ModuleCard
                                 title="Departamentos"
                                 subtitle="Gestión de departamentos"

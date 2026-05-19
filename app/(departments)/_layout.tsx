@@ -4,7 +4,7 @@ import { Redirect, Stack } from "expo-router";
 export default function DepartmentsLayout() {
     const { user } = useSession();
 
-    if (!user || user.rol_id < 2) {
+    if (!user || user.rol_id < 3) {
         return <Redirect href={"/(tabs)/home"} />;
     }
     return (
