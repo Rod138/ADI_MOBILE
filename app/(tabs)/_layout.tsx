@@ -97,6 +97,7 @@ function TabsNavigator() {
             />
             <Tabs.Screen name="change-password" options={{ href: null }} />
             <Tabs.Screen name="change-phone" options={{ href: null }} />
+            <Tabs.Screen name="change-email" options={{ href: null }} />
         </Tabs>
     );
 }

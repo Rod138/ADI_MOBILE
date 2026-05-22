@@ -32,6 +32,18 @@ export interface CreateUserPayload {
     rol_id: 1;
 }
 
+export interface UpdateUserPayload {
+    id: number;
+    name: string;
+    ap: string;
+    am?: string;
+    email: string;
+    phone: string;
+    dep_id: number;
+    rol_id: number;
+    old_dep_id: number;
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useDepartments() {
@@ -204,6 +216,87 @@ export function useDepartments() {
         }
     };
 
+    // ── Actualizar residente ─────────────────────────────────────────────────
+    const updateUser = async (payload: UpdateUserPayload): Promise<boolean> => {
+        setIsLoading(true);
+        clearMessages();
+        try {
+            // 1. Verificar email duplicado
+            const { data: existing } = await supabase
+                .from("users")
+                .select("id")
+                .eq("email", payload.email)
+                .neq("id", payload.id)
+                .maybeSingle();
+
+            if (existing) {
+                setError("Ya existe un usuario con ese correo electrónico.");
+                return false;
+            }
+
+            // 2. Verificar teléfono duplicado
+            const { data: existingPhone, error: phoneError } = await supabase
+                .from("users")
+                .select("id")
+                .eq("phone", payload.phone)
+                .neq("id", payload.id)
+                .maybeSingle();
+
+            if (phoneError || existingPhone) {
+                setError("El teléfono ya está registrado por otro usuario.");
+                return false;
+            }
+
+            // 3. Actualizar datos en la BD
+            const { error: dbError } = await supabase
+                .from("users")
+                .update({
+                    name: payload.name,
+                    ap: payload.ap,
+                    am: payload.am || null,
+                    email: payload.email,
+                    phone: payload.phone,
+                    dep_id: payload.dep_id,
+                    rol_id: payload.rol_id,
+                })
+                .eq("id", payload.id);
+
+            if (dbError) {
+                setError(dbError.message);
+                return false;
+            }
+
+            // 4. Si cambió de departamento, verificar el departamento anterior
+            if (payload.old_dep_id !== payload.dep_id) {
+                const { count } = await supabase
+                    .from("users")
+                    .select("id", { count: "exact", head: true })
+                    .eq("dep_id", payload.old_dep_id);
+
+                if ((count ?? 0) === 0) {
+                    await supabase
+                        .from("departments")
+                        .update({ is_in_use: false })
+                        .eq("id", payload.old_dep_id);
+                }
+
+                // Asegurar que el nuevo departamento esté activo
+                await supabase
+                    .from("departments")
+                    .update({ is_in_use: true })
+                    .eq("id", payload.dep_id);
+            }
+
+            setSuccess("Usuario actualizado correctamente.");
+            return true;
+        } catch (e: any) {
+            setError(`Error interno: ${e?.message || "No se pudo conectar al servidor."}`);
+            return false;
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // ── Eliminar residente ───────────────────────────────────────────────────
     // Si era el último residente → desactiva el depto automáticamente.
     const deleteUser = async (userId: number, depId: number): Promise<boolean> => {
@@ -247,6 +340,7 @@ export function useDepartments() {
         fetchUsersByDept,
         toggleDeptInUse,
         createUser,
+        updateUser,
         deleteUser,
     };
 }

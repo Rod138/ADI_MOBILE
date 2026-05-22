@@ -12,6 +12,8 @@ export interface LoginCredentials {
 export interface AuthUser {
     id: number;
     name: string;
+    ap?: string;
+    am?: string;
     email: string;
     phone: string;
     dep_id: number;
@@ -32,7 +34,7 @@ export function useAuth() {
             // 1. Buscar por email (ya no filtramos por password en la query)
             const { data: user, error: dbError } = await supabase
                 .from("users")
-                .select("id, name, email, phone, dep_id, rol_id, password")
+                .select("id, name, ap, am, email, phone, dep_id, rol_id, password")
                 .eq("email", credentials.email)
                 .single();
 
@@ -57,6 +59,8 @@ export function useAuth() {
             const sessionUser: AuthUser = {
                 id: user.id,
                 name: user.name,
+                ap: user.ap,
+                am: user.am,
                 email: user.email,
                 phone: user.phone,
                 dep_id: user.dep_id,

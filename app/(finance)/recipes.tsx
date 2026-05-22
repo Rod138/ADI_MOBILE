@@ -33,6 +33,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const CURRENT_MONTH = getCurrentMonthName();
 const CURRENT_YEAR = getCurrentYear();
 
+/** Día límite del mes para pago puntual. Después de este día aplica recargo. */
+const LATE_PAYMENT_DAY = 15;
+
+/** Porcentaje de recargo por pago tardío (0.10 = 10%). */
+const SURCHARGE_RATE = 0.10;
+
 const MONTH_NAMES_ALL = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
@@ -50,6 +56,25 @@ interface AvailablePeriod {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Determina si el pago es tardío y aplica recargo:
+ * - Si el período seleccionado es un mes anterior al actual → siempre tardío.
+ * - Si es el mes actual pero el día de hoy es mayor a LATE_PAYMENT_DAY → tardío.
+ */
+function isLatePayment(selectedMonth: string, selectedYear: number): boolean {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonthIdx = now.getMonth();
+    const selectedMonthIdx = MONTH_NAMES_ALL.indexOf(selectedMonth);
+
+    if (selectedYear < currentYear) return true;
+    if (selectedYear === currentYear && selectedMonthIdx < currentMonthIdx) return true;
+    if (selectedYear === currentYear && selectedMonthIdx === currentMonthIdx) {
+        return now.getDate() > LATE_PAYMENT_DAY;
+    }
+    return false;
+}
 
 function getValidationStyle(validated: boolean | null) {
     if (validated === true)
@@ -347,11 +372,12 @@ function ReceiptCard({
 // ── Upload Form ───────────────────────────────────────────────────────────────
 
 function UploadForm({
-    depId, amountExpected, selectedMonth, selectedYear, onSuccess,
+    depId, amountExpected, selectedMonth, selectedYear, onSuccess, surchargeApplied,
 }: {
     depId: number; amountExpected: number;
     selectedMonth: string; selectedYear: number;
     onSuccess: () => void;
+    surchargeApplied: boolean;
 }) {
     const { createRecipe, isLoading } = useRecipes();
     const [amount, setAmount] = useState(amountExpected > 0 ? String(amountExpected) : "");
@@ -484,12 +510,41 @@ function UploadForm({
                 )}
             </View>
 
-            {amountExpected > 0 && (
+            {surchargeApplied && amountExpected > 0 && (
+                <View style={form.surchargeNote}>
+                    <Ionicons name="alert-circle" size={15} color="#B45309" />
+                    <View style={{ flex: 1 }}>
+                        <Text style={form.surchargeNoteTitle}>Recargo por pago tardío (10%)</Text>
+                        <Text style={form.surchargeNoteText}>
+                            El monto incluye un recargo del 10% por pago fuera de tiempo
+                            (después del día {LATE_PAYMENT_DAY} del mes).
+                        </Text>
+                    </View>
+                </View>
+            )}
+
+            {!surchargeApplied && amountExpected > 0 && (
                 <View style={form.quotaNote}>
                     <Ionicons name="information-circle-outline" size={14} color="#0891B2" />
                     <Text style={form.quotaNoteText}>
                         Cuota del mes:{" "}
                         <Text style={{ fontFamily: "Outfit_700Bold" }}>{formatCurrency(amountExpected)}</Text>
+                    </Text>
+                </View>
+            )}
+
+            {surchargeApplied && amountExpected > 0 && (
+                <View style={form.quotaNote}>
+                    <Ionicons name="information-circle-outline" size={14} color="#0891B2" />
+                    <Text style={form.quotaNoteText}>
+                        Cuota base:{" "}
+                        <Text style={{ fontFamily: "Outfit_700Bold" }}>
+                            {formatCurrency(Math.round(amountExpected / (1 + SURCHARGE_RATE)))}
+                        </Text>
+                        {"  +10% = "}
+                        <Text style={{ fontFamily: "Outfit_700Bold", color: "#B45309" }}>
+                            {formatCurrency(amountExpected)}
+                        </Text>
                     </Text>
                 </View>
             )}
@@ -596,6 +651,12 @@ export default function RecipesScreen() {
     const [fundLoading, setFundLoading] = useState(true);
 
     const depId = user?.dep_id;
+
+    // ── Recargo por pago tardío ───────────────────────────────────────────────
+    const isLate = isLatePayment(selectedMonth, selectedYear);
+    const effectiveAmount = amountExpected > 0 && isLate
+        ? Math.round(amountExpected * (1 + SURCHARGE_RATE))
+        : amountExpected;
 
     useEffect(() => {
         const loadFund = async () => {
@@ -805,15 +866,37 @@ export default function RecipesScreen() {
                         </View>
                     )}
 
+                    {/* Banner: recargo por pago tardío */}
+                    {isLate && amountExpected > 0 && !isComplete && !showForm && (
+                        <View style={styles.surchargeBanner}>
+                            <View style={styles.surchargeBannerIconWrap}>
+                                <Ionicons name="warning" size={20} color="#B45309" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.surchargeBannerTitle}>
+                                    Recargo del 10% por pago tardío
+                                </Text>
+                                <Text style={styles.surchargeBannerSub}>
+                                    El pago fuera del día {LATE_PAYMENT_DAY} genera un recargo.
+                                    Cuota con recargo:{" "}
+                                    <Text style={{ fontFamily: "Outfit_700Bold" }}>
+                                        {formatCurrency(effectiveAmount)}
+                                    </Text>
+                                </Text>
+                            </View>
+                        </View>
+                    )}
+
                     {/* Formulario */}
                     {showForm && depId && (
                         <Animated.View style={{ opacity: formAnim }}>
                             <UploadForm
                                 depId={depId}
-                                amountExpected={amountExpected}
+                                amountExpected={effectiveAmount}
                                 selectedMonth={selectedMonth}
                                 selectedYear={selectedYear}
                                 onSuccess={handleSuccess}
+                                surchargeApplied={isLate && amountExpected > 0}
                             />
                         </Animated.View>
                     )}
@@ -837,7 +920,7 @@ export default function RecipesScreen() {
                             <Text style={styles.emptyTitle}>Sin comprobante {isPastMonth ? "en este período" : "este mes"}</Text>
                             <Text style={styles.stateText}>
                                 {amountExpected > 0
-                                    ? `La cuota de ${selectedMonth} es ${formatCurrency(amountExpected)}. Toca "Subir" para enviar tu comprobante.`
+                                    ? `La cuota de ${selectedMonth} es ${formatCurrency(effectiveAmount)}${isLate ? " (incluye recargo del 10%)" : ""}. Toca "Subir" para enviar tu comprobante.`
                                     : `Toca "Subir" para enviar tu comprobante de ${selectedMonth} ${selectedYear}.`}
                             </Text>
                         </View>
@@ -1000,6 +1083,25 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.primary.muted, alignItems: "center", justifyContent: "center",
     },
     countBadgeText: { fontFamily: "Outfit_700Bold", fontSize: 10, color: Colors.primary.dark },
+
+    // Recargo
+    surchargeBanner: {
+        flexDirection: "row", alignItems: "flex-start", gap: 14,
+        backgroundColor: "#FFFBEB", borderWidth: 1, borderColor: "#FCD34D",
+        borderRadius: 16, padding: 16, borderLeftWidth: 4, borderLeftColor: "#F59E0B",
+    },
+    surchargeBannerIconWrap: {
+        width: 40, height: 40, borderRadius: 12,
+        backgroundColor: "#FEF3C7", borderWidth: 1, borderColor: "#FCD34D",
+        alignItems: "center", justifyContent: "center", flexShrink: 0,
+    },
+    surchargeBannerTitle: {
+        fontFamily: "Outfit_700Bold", fontSize: 14, color: "#92400E",
+    },
+    surchargeBannerSub: {
+        fontFamily: "Outfit_400Regular", fontSize: 12,
+        color: "#92400E", opacity: 0.9, marginTop: 3, lineHeight: 18,
+    },
 });
 
 const card = StyleSheet.create({
@@ -1110,6 +1212,13 @@ const form = StyleSheet.create({
         borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 16,
     },
     quotaNoteText: { flex: 1, fontFamily: "Outfit_400Regular", fontSize: 12, color: "#0C4A6E" },
+    surchargeNote: {
+        flexDirection: "row", alignItems: "flex-start", gap: 10,
+        backgroundColor: "#FFFBEB", borderWidth: 1, borderColor: "#FCD34D",
+        borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12,
+    },
+    surchargeNoteTitle: { fontFamily: "Outfit_700Bold", fontSize: 12, color: "#92400E", marginBottom: 2 },
+    surchargeNoteText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: "#92400E", lineHeight: 16 },
     field: { marginBottom: 16 },
     fieldLabel: {
         fontFamily: "Outfit_700Bold", fontSize: 11,

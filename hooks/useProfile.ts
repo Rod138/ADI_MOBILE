@@ -14,6 +14,11 @@ export interface UpdatePhonePayload {
     newPhone: string;
 }
 
+export interface UpdateEmailPayload {
+    userId: number;
+    newEmail: string;
+}
+
 export function useProfile() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -115,5 +120,48 @@ export function useProfile() {
         }
     };
 
-    return { updatePassword, updatePhone, isLoading, error, success, clearMessages };
+    // ── Cambiar correo electrónico ─────────────
+    const updateEmail = async ({ userId, newEmail }: UpdateEmailPayload): Promise<boolean> => {
+        setIsLoading(true);
+        clearMessages();
+
+        try {
+            const { data: existingUser, error: checkError } = await supabase
+                .from("users")
+                .select("id")
+                .eq("email", newEmail)
+                .neq("id", userId)
+                .maybeSingle();
+
+            if (checkError) {
+                setError("Error al verificar el correo electrónico.");
+                return false;
+            }
+
+            if (existingUser) {
+                setError("El correo electrónico ya está registrado por otro usuario.");
+                return false;
+            }
+
+            const { error: dbError } = await supabase
+                .from("users")
+                .update({ email: newEmail })
+                .eq("id", userId);
+
+            if (dbError) {
+                setError("Error al actualizar el correo electrónico.");
+                return false;
+            }
+
+            setSuccess("Correo electrónico actualizado correctamente.");
+            return true;
+        } catch {
+            setError("No se pudo conectar al servidor.");
+            return false;
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return { updatePassword, updatePhone, updateEmail, isLoading, error, success, clearMessages };
 }

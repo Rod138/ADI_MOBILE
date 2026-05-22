@@ -4,7 +4,7 @@ import { BackButton, ScreenShell, StatusBanner } from "@/components/ui";
 import { Colors } from "@/constants/colors";
 import { useDepartments, type DeptUser } from "@/hooks/useDepartments";
 import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -70,7 +70,7 @@ function getRolColor(rolId: number): { color: string; bg: string; border: string
 
 // ── Tarjeta de usuario ────────────────────────────────────────────────────────
 
-function UserCard({ user, onDelete }: { user: DeptUser; onDelete: (u: DeptUser) => void }) {
+function UserCard({ user, onEdit, onDelete }: { user: DeptUser; onEdit: (u: DeptUser) => void; onDelete: (u: DeptUser) => void }) {
     const initials = `${user.name[0] ?? ""}${user.ap?.[0] ?? ""}`.toUpperCase();
     const rolColor = getRolColor(user.rol_id);
 
@@ -98,9 +98,14 @@ function UserCard({ user, onDelete }: { user: DeptUser; onDelete: (u: DeptUser) 
                     <Text style={cardStyles.metaText}>{user.phone || "—"}</Text>
                 </View>
             </View>
-            <TouchableOpacity style={cardStyles.deleteBtn} onPress={() => onDelete(user)} activeOpacity={0.75}>
-                <Ionicons name="trash-outline" size={16} color={Colors.status.error} />
-            </TouchableOpacity>
+            <View style={cardStyles.actionsContainer}>
+                <TouchableOpacity style={cardStyles.editBtn} onPress={() => onEdit(user)} activeOpacity={0.75}>
+                    <Ionicons name="pencil-outline" size={16} color={Colors.primary.main} />
+                </TouchableOpacity>
+                <TouchableOpacity style={cardStyles.deleteBtn} onPress={() => onDelete(user)} activeOpacity={0.75}>
+                    <Ionicons name="trash-outline" size={16} color={Colors.status.error} />
+                </TouchableOpacity>
+            </View>
         </View>
     );
 }
@@ -287,7 +292,11 @@ export default function DeptDetailScreen() {
     const [modalVisible, setModalVisible] = useState(false);
     const [banner, setBanner] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
 
-    useEffect(() => { fetchUsersByDept(depId); }, [depId]);
+    useFocusEffect(
+        useCallback(() => {
+            fetchUsersByDept(depId);
+        }, [depId])
+    );
 
     const showBanner = (type: "success" | "error" | "info", text: string) => {
         setBanner({ type, text });
@@ -391,7 +400,14 @@ export default function DeptDetailScreen() {
                     data={users}
                     keyExtractor={u => String(u.id)}
                     renderItem={({ item }) => (
-                        <UserCard user={item} onDelete={handleDelete} />
+                        <UserCard
+                            user={item}
+                            onEdit={(u) => router.push({
+                                pathname: "/(departments)/edit-user",
+                                params: { userId: String(item.id), oldDepId: String(depId) }
+                            })}
+                            onDelete={handleDelete}
+                        />
                     )}
                     contentContainerStyle={styles.list}
                     showsVerticalScrollIndicator={false}
@@ -455,6 +471,17 @@ const cardStyles = StyleSheet.create({
     rolText: { fontFamily: "Outfit_600SemiBold", fontSize: 10, letterSpacing: 0.3 },
     metaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
     metaText: { fontFamily: "Outfit_400Regular", fontSize: 11, color: Colors.screen.textMuted, flex: 1 },
+    actionsContainer: {
+        flexDirection: "column",
+        gap: 8,
+        alignItems: "center",
+    },
+    editBtn: {
+        width: 36, height: 36, borderRadius: 10,
+        backgroundColor: Colors.primary.soft,
+        borderWidth: 1, borderColor: Colors.primary.muted,
+        alignItems: "center", justifyContent: "center",
+    },
     deleteBtn: {
         width: 36, height: 36, borderRadius: 10,
         backgroundColor: Colors.status.errorBg,

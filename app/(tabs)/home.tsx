@@ -216,7 +216,7 @@ export default function HomeScreen() {
                         <View style={styles.footerInfo}>
                             <Ionicons name="business-outline" size={13} color={Colors.screen.textMuted} />
                             <Text style={styles.footerInfoText}>
-                                X-CORP ADI v1.0
+                                X-CORP ADI v.1.1.0
                             </Text>
                         </View>
 

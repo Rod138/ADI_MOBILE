@@ -140,6 +140,12 @@ export default function ProfileScreen() {
                             label="Cambiar teléfono"
                             onPress={() => router.push("/(tabs)/change-phone" as any)}
                         />
+                        <View style={styles.divider} />
+                        <ActionRow
+                            icon="mail-outline"
+                            label="Cambiar correo electrónico"
+                            onPress={() => router.push("/(tabs)/change-email" as any)}
+                        />
                     </View>
                 </View>
 
@@ -155,7 +161,7 @@ export default function ProfileScreen() {
                     </View>
                 </View>
 
-                <Text style={styles.version}>ADI v1.0.0 · X-CORP</Text>
+                <Text style={styles.version}>ADI v.1.1.0 · X-CORP</Text>
             </ScrollView>
         </ScreenShell>
     );
